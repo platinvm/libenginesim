@@ -1,5 +1,8 @@
 # libenginesim
 
+[![CI](https://github.com/platinvm/libenginesim/actions/workflows/ci.yml/badge.svg)](https://github.com/platinvm/libenginesim/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/libenginesim)](https://www.npmjs.com/package/libenginesim)
+
 [AngeTheGreat's engine-sim](https://github.com/ange-yaghi/engine-sim) as a
 headless C library: a piston engine you can step, read and pull audio from,
 with no windows, no threads, no files and no audio device anywhere in it.
@@ -14,20 +17,34 @@ binding is its first consumer, not its shape.
 
 ## Try the demo
 
-The WebAssembly build is committed, so this needs no toolchain at all. It does
-need a server: ES modules and AudioWorklets will not load over `file://`.
-
-```sh
-git clone <this repository> && cd libenginesim
-python3 -m http.server 8000
-```
-
-Open <http://localhost:8000/demo/>, press **Start audio**, then hold
-**crank** until it catches. Space is wide-open throttle.
+**[platinvm.github.io/libenginesim](https://platinvm.github.io/libenginesim/)**
+— press **Start audio**, then hold **crank** until it catches. Space is
+wide-open throttle.
 
 Every sound on that page is combustion, gas flow and convolution computed a
 sample at a time in an AudioWorklet. There are no recordings and no
 dependencies beyond this library.
+
+To run it locally, no toolchain is needed — the WebAssembly build is
+committed. It does need a server, because ES modules and AudioWorklets will
+not load over `file://`:
+
+```sh
+git clone https://github.com/platinvm/libenginesim.git && cd libenginesim
+python3 -m http.server 8000
+```
+
+Then open <http://localhost:8000>.
+
+## Install
+
+```sh
+npm install libenginesim
+```
+
+No runtime dependencies, and none are possible: the wasm is inlined into the
+worklet bundle, so nothing is fetched at run time. The package also ships
+`include/enginesim.h`, so the tarball carries the ABI it is a binding for.
 
 ## Using the C ABI
 
@@ -116,8 +133,13 @@ cmake --build build-wasm -j
 ```
 
 This regenerates `bindings/js/enginesim-worklet.js` in the source tree, which
-is the file the demo loads. It is committed so the demo works from a bare
-clone.
+is the file the demo loads and the npm package ships. It is committed so both
+work from a bare clone.
+
+Use **Emscripten 6.0.5**, the version pinned in the workflows. The build is
+byte-reproducible, and CI compares the rebuilt bundle against the committed
+one exactly, so a different toolchain version will fail the check even when
+the output is perfectly good. See [Releasing](#releasing).
 
 Two constraints shape that build, both from the AudioWorklet global scope:
 
@@ -136,7 +158,7 @@ isolation headers.
 ## Using it from JavaScript
 
 ```js
-import { EngineSim, Preset } from './bindings/js/enginesim.js';
+import { EngineSim, Preset } from 'libenginesim';
 
 const engine = await EngineSim.create({ preset: Preset.V8 });
 await engine.resume();               // call from a user gesture
@@ -152,6 +174,30 @@ destination — connect it to your own nodes for effects or metering.
 with other audio. Types are in
 [`bindings/js/enginesim.d.ts`](bindings/js/enginesim.d.ts).
 
+Bundlers that rewrite asset URLs can reach the worklet at the `libenginesim/worklet`
+subpath. If yours does something unusual, pass `workletUrl` to `create()`.
+
+## Tests
+
+```sh
+ctest --test-dir build       # native: both presets crank, idle, rev, hold a dyno
+node tests/worklet.mjs       # the shipped bundle, in a bare AudioWorklet scope
+```
+
+`tests/worklet.mjs` is the interesting one. It runs the committed bundle in a
+`vm` context that has `sampleRate`, `currentTime` and `registerProcessor` and
+deliberately lacks `window`, `self`, `document`, `fetch` and `performance`.
+That absence is the whole point: a worklet is the one place those are missing,
+and code that quietly depends on them works everywhere except in production.
+It found the missing `performance` shim, and it reproduces a heap corruption
+that only appears when the render quantum exceeds 128 frames. Zero
+dependencies, about two seconds.
+
+There is also `npm run test:browser`, a Playwright run against real Chromium
+that starts its own server and drives the demo's own controls. It is not in
+CI — the worklet test covers the same bundle without downloading a browser —
+so it needs `npm install && npx playwright install chromium` first.
+
 ## Layout
 
 ```
@@ -161,13 +207,33 @@ src/js/processor.js      the AudioWorkletProcessor that hosts the simulation
 bindings/js/             the JavaScript binding and its built worklet bundle
 patches/                 portability fixes applied to a copy of upstream
 demo/                    the demo page: vanilla HTML, CSS and modules
-tests/smoke.c            drives both presets natively
+tests/                   native smoke test, worklet test, browser test
+.github/workflows/       build and test, deploy the demo, publish on a tag
 vendor/engine-sim        upstream, as a submodule, byte for byte
 ```
 
 Adding a second language means adding one directory under `bindings/`. There
 is nothing to generalise first, and deliberately no abstraction waiting for
 one.
+
+## Releasing
+
+`bindings/js/enginesim-worklet.js` is a build artifact that is committed on
+purpose: it is what lets the demo and the npm package work without a
+toolchain. CI rebuilds it and compares byte for byte, so it cannot go stale
+unnoticed. That comparison is why `EMSDK_VERSION` is pinned in both workflows
+— bump the pin and the bundle in the same commit.
+
+To publish: bump `version` in `package.json`, commit, then push a matching
+tag.
+
+```sh
+git tag v0.1.1 && git push origin v0.1.1
+```
+
+The release workflow refuses to run if the tag and `package.json` disagree,
+rebuilds the bundle to confirm it matches the tagged sources, and publishes
+with npm provenance. It needs an `NPM_TOKEN` secret with publish rights.
 
 ## Upstream, and why it is patched
 
