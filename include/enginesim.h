@@ -8,13 +8,13 @@
  * ---------------
  *   - Pure state machine. No threads, no globals, no file or device I/O.
  *     Every call is host-driven and returns without blocking.
- *   - The host owns all memory it passes in. The library never takes ownership
- *     of a pointer in a definition struct and never retains one past the call
- *     it was given to, except where explicitly stated.
+ *   - The host owns all memory it passes in. Definition structs are fully
+ *     copied during es_sim_create; nothing is retained past that call.
  *   - A simulation handle is not thread-safe. Distinct handles share nothing
  *     and may be driven concurrently from different threads.
- *   - Units are SI unless the field name says otherwise: metres, kilograms,
- *     radians, seconds, pascals, newton-metres, watts. RPM is spelled out.
+ *   - Units are SI unless a field name says otherwise: metres, kilograms,
+ *     radians, seconds, pascals, newton-metres, watts. RPM and SCFM are
+ *     spelled out where upstream's model is defined in them.
  */
 
 #ifndef ENGINESIM_H
@@ -55,14 +55,29 @@ typedef enum es_result {
 ES_API const char *es_result_str(es_result result);
 
 /* Upstream indexes a fixed 8-slot array by cylinder number, so engines beyond
- * eight cylinders are rejected at creation rather than corrupting memory. */
+ * eight cylinders are rejected by es_sim_create rather than corrupting
+ * memory. See "Known gaps" in the README. */
 #define ES_MAX_CYLINDERS 8
+
+/* --------------------------------------------------------------- units --- */
+
+/*
+ * Upstream models gas flow through a restriction with a dimensionless "flow
+ * constant" rather than a volumetric rate. These convert the ratings parts are
+ * actually sold under. Pure functions; no state.
+ *
+ * es_flow_from_carb_cfm  - carburettor CFM, for throttle bodies, runners and
+ *                          exhaust tubing.
+ * es_flow_from_cfm_28    - CFM measured at 28 inH2O, the flow-bench
+ *                          convention, used here for piston ring blowby.
+ */
+ES_API double es_flow_from_carb_cfm(double scfm);
+ES_API double es_flow_from_cfm_28(double scfm);
 
 /* -------------------------------------------------------------- curves --- */
 
 /*
- * A sampled lookup curve: `count` (x, y) pairs in ascending x. Used for cam
- * lobe profiles, port flow and ignition timing.
+ * A sampled lookup curve: `count` (x, y) pairs in ascending x.
  *
  * `x` and `y` are host-owned and are copied during es_sim_create, so they may
  * be freed as soon as that call returns.
@@ -77,51 +92,95 @@ typedef struct es_curve {
     double filter_radius;
 } es_curve;
 
+/*
+ * A cam lobe, generated from the numbers a cam card is specified in rather
+ * than as a sampled profile. Upstream's harmonic generator is reproduced
+ * exactly.
+ */
+typedef struct es_cam_lobe {
+    double duration_at_50_thou;  /* rad of crank rotation at 0.050" lift */
+    double gamma;                /* profile aggressiveness; 1.1 is typical */
+    double lift;                 /* peak valve lift, m */
+    uint32_t steps;              /* samples to generate; 0 selects 256 */
+} es_cam_lobe;
+
 /* --------------------------------------------------------- engine defs --- */
 
 /*
+ * One exhaust path from the head to open air. Engines commonly have more than
+ * one, and the difference in their lengths is a large part of why a
+ * cross-plane V8 burbles and an inline-4 does not.
+ */
+typedef struct es_exhaust_def {
+    double outlet_flow_rate;              /* es_flow_from_carb_cfm */
+    double primary_tube_length;
+    double primary_flow_rate;             /* es_flow_from_carb_cfm */
+    double velocity_decay;
+    double volume;                        /* 0 selects upstream's default */
+    double collector_cross_section_area;  /* 0 selects upstream's default */
+    double audio_volume;                  /* this path's share of the mix */
+    double length;                        /* total path length; sets delay */
+} es_exhaust_def;
+
+/* One cylinder's individuality within its bank. */
+typedef struct es_cylinder_def {
+    uint32_t rod_journal;      /* index into es_engine_def.rod_journal_angles */
+    uint32_t exhaust_system;   /* index into es_engine_def.exhaust_systems */
+    double sound_attenuation;  /* 0 selects 1.0 */
+    double primary_length;     /* header runner length; louder as it shortens */
+    double blowby;             /* es_flow_from_cfm_28; 0 for none */
+} es_cylinder_def;
+
+/*
  * One bank of cylinders and the head that sits on it. An inline engine has a
- * single bank; a V8 has two.
+ * single bank; a V8 has two. All cylinders in a bank share a head and cam.
  */
 typedef struct es_bank_def {
     /* Bank angle from vertical. Positive tilts right. */
     double angle;
+
+    const es_cylinder_def *cylinders;
     uint32_t cylinder_count;
 
-    /* Combustion chamber volume at top dead centre. Sets compression ratio
-     * together with the bore and stroke on es_engine_def. */
-    double chamber_volume;
+    /* -- head -- */
+    double chamber_volume;   /* at TDC; sets compression with bore and stroke */
+    double intake_runner_volume;
+    double intake_runner_cross_section_area;
+    double exhaust_runner_volume;
+    double exhaust_runner_cross_section_area;
 
-    /* Port flow as a function of valve lift (m). y is in SCFM, matching
-     * upstream's flow model. */
+    /* Port flow against valve lift (m). y is a flow constant, so pass
+     * flow-bench figures through es_flow_from_cfm_28 first - the same
+     * conversion upstream's add_flow_sample applies. */
     es_curve intake_flow;
     es_curve exhaust_flow;
 
-    /* Cam. `lobe_profile` maps camshaft angle (rad, 0 at the lobe peak) to
-     * normalised lift in [0, 1]; it is scaled by the lift figures below. */
-    es_curve lobe_profile;
+    /* -- cam -- */
+    es_cam_lobe intake_lobe;
+    es_cam_lobe exhaust_lobe;
     double intake_lobe_center;   /* rad after TDC */
     double exhaust_lobe_center;  /* rad before TDC */
-    double intake_lift;
-    double exhaust_lift;
+    double cam_advance;
+    double cam_base_radius;
 } es_bank_def;
 
 /*
  * A complete engine. Build one in code, or start from a preset and adjust.
  *
- * Every pointer in this struct (and in any nested es_curve) is host-owned and
- * is fully copied by es_sim_create.
+ * Every pointer here (and in any nested struct) is host-owned and is fully
+ * copied by es_sim_create.
  */
 typedef struct es_engine_def {
     /* Informational; copied. May be NULL. */
     const char *name;
 
-    /* Physics tick rate. Upstream engines use 10000. Higher is more stable
-     * and more expensive; this does not affect the audio sample rate. */
+    /* Physics tick rate in Hz. Upstream engines use 10000. Higher is more
+     * stable and more expensive; independent of the audio sample rate. */
     uint32_t simulation_frequency;
 
     /* -- rotating assembly -- */
-    double crank_throw;             /* half the stroke */
+    double bore;
+    double stroke;
     double crank_mass;
     double crank_moment_of_inertia;
     double crank_friction_torque;
@@ -131,58 +190,52 @@ typedef struct es_engine_def {
     double rod_mass;
     double rod_length;
     double rod_moment_of_inertia;
-    double rod_center_of_mass;      /* from the big end */
+    double rod_center_of_mass;   /* from the big end */
 
     double piston_mass;
     double piston_compression_height;
-    double bore;
-    double stroke;
 
-    /* Crank pin angles, one per rod journal, in firing-geometry order. A
-     * cross-plane V8 has four; an inline-4 has four. */
+    /* Crank pin angles. Cylinders reference these by index. */
     const double *rod_journal_angles;
     uint32_t rod_journal_count;
 
-    /* -- banks -- */
+    /* -- banks and exhaust -- */
     const es_bank_def *banks;
     uint32_t bank_count;
+    const es_exhaust_def *exhaust_systems;
+    uint32_t exhaust_system_count;
 
-    /* -- intake -- */
+    /* -- intake, shared by every cylinder -- */
     double intake_plenum_volume;
-    double intake_plenum_cross_section;
+    double intake_plenum_cross_section_area;
     double intake_runner_length;
-    double intake_runner_flow_rate;   /* SCFM */
-    double intake_flow_rate;          /* SCFM, throttle body */
-    double intake_idle_flow_rate;     /* SCFM, bypass at closed throttle */
-    double intake_idle_throttle_plate_position; /* 0..1 */
+    double intake_runner_flow_rate;              /* es_flow_from_carb_cfm */
+    double intake_flow_rate;                     /* es_flow_from_carb_cfm */
+    double intake_idle_flow_rate;                /* es_flow_from_carb_cfm */
+    double intake_idle_throttle_plate_position;  /* 0..1 */
     double intake_velocity_decay;
+    double throttle_gamma;                       /* pedal response; 0 -> 1.0 */
 
-    /* -- exhaust -- */
-    double exhaust_volume;
-    double exhaust_collector_cross_section;
-    double exhaust_outlet_flow_rate;  /* SCFM */
-    double exhaust_primary_tube_length;
-    double exhaust_primary_flow_rate; /* SCFM */
-    double exhaust_length;
-    double exhaust_audio_volume;      /* 0..1, this bank's share of the mix */
-
-    /* -- ignition -- */
-    /* Cylinder firing order as indices into the flattened cylinder list
-     * (bank 0's cylinders first, then bank 1's, ...). Exactly as many entries
-     * as there are cylinders. */
+    /* -- ignition --
+     * `firing_order` lists cylinder indices into the flattened cylinder list
+     * (bank 0's cylinders first, then bank 1's, ...), in the order they fire,
+     * with exactly as many entries as there are cylinders. It determines both
+     * spark timing and cam lobe placement, so it is the only place firing
+     * geometry is written down. */
     const uint32_t *firing_order;
-    /* Ignition advance (rad before TDC) as a function of engine speed (RPM). */
+    /* Ignition advance (rad before TDC) against engine speed (RPM). */
     es_curve timing_curve;
-    double rev_limit;               /* RPM */
-    double redline;                 /* RPM, reported in telemetry */
+    double rev_limit;           /* RPM */
+    double rev_limit_duration;  /* s of spark cut; 0 selects 0.5 */
+    double redline;             /* RPM, reported in telemetry */
 
     /* -- starter -- */
     double starter_torque;
-    double starter_speed;           /* RPM */
+    double starter_speed;       /* RPM */
 
     /* -- audio character --
-     * Upstream's synthesis knobs, preserved verbatim. Sensible values are
-     * roughly hf_gain 0.01, jitter 0.5, noise 1.0. */
+     * Upstream's synthesis knobs, preserved verbatim. Typical values are
+     * hf_gain 0.01, jitter 0.6, noise 1.0. */
     double hf_gain;
     double jitter;
     double noise;
@@ -199,11 +252,14 @@ typedef enum es_preset {
  * Fills `out` with a ready-to-run engine definition so a binding can make
  * noise without shipping data files.
  *
- * The pointers written into `out` reference static library data that is valid
- * for the life of the program; the caller may point them elsewhere but must
- * not free them. Adjust any field and pass the result to es_sim_create.
+ * The pointers written into `out` reference static library data valid for the
+ * life of the program; the caller may point them elsewhere but must not free
+ * them. Adjust any field and pass the result to es_sim_create.
  */
 ES_API es_result es_preset_engine(es_preset preset, es_engine_def *out);
+
+/* Static, never-null display name for a preset, e.g. "Inline-4". */
+ES_API const char *es_preset_name(es_preset preset);
 
 /* ---------------------------------------------------------- simulation --- */
 
@@ -214,7 +270,7 @@ typedef struct es_sim_config {
     uint32_t sample_rate;
 
     /* Convolution impulse response giving the exhaust its character: mono
-     * 16-bit PCM at `sample_rate`. Leave NULL to use the built-in response.
+     * 16-bit PCM at `sample_rate`. NULL selects the built-in response.
      * Copied during es_sim_create. */
     const int16_t *impulse_response;
     uint32_t impulse_response_frames;
@@ -225,8 +281,9 @@ typedef struct es_sim_config {
  * Creates a simulation. `config` may be NULL for defaults.
  *
  * Returns ES_ERR_INVALID_ARGUMENT if the definition is inconsistent - most
- * commonly a cylinder count above ES_MAX_CYLINDERS, a firing order whose
- * length disagrees with the cylinder count, or an empty curve.
+ * commonly a total cylinder count above ES_MAX_CYLINDERS, a firing order whose
+ * length disagrees with that count, an index that is out of range, or an empty
+ * curve.
  *
  * On success `*out` receives a handle that must be released with
  * es_sim_destroy. On failure `*out` is set to NULL.
@@ -257,7 +314,7 @@ ES_API void es_sim_destroy(es_sim *sim);
  */
 ES_API uint32_t es_sim_step(es_sim *sim, float *audio, uint32_t frames);
 
-/* All controls are clamped to their valid range and take effect on the next
+/* Controls are clamped to their valid range and take effect on the next
  * es_sim_step. */
 
 /* 0 = closed, 1 = wide open. */
@@ -282,7 +339,7 @@ ES_API void es_sim_set_volume(es_sim *sim, double volume);
 
 typedef struct es_telemetry {
     double rpm;
-    double torque;                  /* N·m at the crank */
+    double torque;                  /* N*m at the crank */
     double power;                   /* W */
     double throttle;                /* commanded, 0..1 */
     double throttle_plate_position; /* actual, 0..1 */
