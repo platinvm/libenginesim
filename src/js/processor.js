@@ -24,12 +24,15 @@ class EngineProcessor extends AudioWorkletProcessor {
     this.sim = 0;
     this.pendingPreset = options?.processorOptions?.preset ?? 0;
     this.telemetryCountdown = 0;
+    /* Must be a number, not undefined: the grow check below compares against
+     * it, and every comparison with undefined is false. */
+    this.audioBytes = 128 * 4;
 
     this.port.onmessage = (e) => this.onMessage(e.data);
 
     createEngineSim().then((M) => {
       this.M = M;
-      this.audioPtr = M._es_js_alloc(128 * 4);
+      this.audioPtr = M._es_js_alloc(this.audioBytes);
       this.telemetryPtr = M._es_js_alloc(M._es_js_sizeof_telemetry());
       this.load(this.pendingPreset);
       this.ready = true;
