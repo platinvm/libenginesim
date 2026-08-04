@@ -114,20 +114,61 @@ if(EMSCRIPTEN)
     # global scope has no fetch(), so nothing may be loaded at runtime.
     add_executable(enginesim_wasm src/wasm_exports.cpp)
     target_link_libraries(enginesim_wasm PRIVATE enginesim)
+
+    # The ABI functions live in a static library that nothing in this target
+    # calls, so they must be named or the linker drops them. EMSCRIPTEN_KEEPALIVE
+    # is deliberately not used on them - the public header stays free of
+    # Emscripten specifics.
+    set(ES_EXPORTS
+        _es_abi_version _es_result_str
+        _es_flow_from_carb_cfm _es_flow_from_cfm_28
+        _es_preset_engine _es_preset_name
+        _es_sim_create _es_sim_destroy _es_sim_step
+        _es_sim_set_throttle _es_sim_set_starter _es_sim_set_ignition
+        _es_sim_set_dyno _es_sim_set_volume _es_sim_telemetry
+        _es_js_sizeof_engine_def _es_js_sizeof_sim_config _es_js_sizeof_telemetry
+        _es_js_alloc _es_js_free _es_js_telemetry_get
+        _es_js_preset _es_js_preset_name _es_js_def_redline
+        _es_js_def_set_simulation_frequency
+        _malloc _free)
+    list(JOIN ES_EXPORTS "," ES_EXPORTS_CSV)
+
+    # EXPORT_ES6 is off on purpose: an AudioWorklet cannot import, so the glue
+    # has to be plain script text that can be concatenated with the processor.
     target_link_options(enginesim_wasm PRIVATE
+        -sEXPORTED_FUNCTIONS=[${ES_EXPORTS_CSV}]
         -sSINGLE_FILE=1
         -sMODULARIZE=1
-        -sEXPORT_ES6=1
+        -sEXPORT_ES6=0
         -sEXPORT_NAME=createEngineSim
         -sENVIRONMENT=web,worker
         -sALLOW_MEMORY_GROWTH=1
         -sFILESYSTEM=0
-        -sEXPORTED_RUNTIME_METHODS=['HEAPF32','HEAPU8','HEAPU32','HEAPF64']
+        -sDYNAMIC_EXECUTION=0
+        -sEXPORTED_RUNTIME_METHODS=['HEAPF32','HEAPU32']
         -O3)
     set_target_properties(enginesim_wasm PROPERTIES
-        OUTPUT_NAME enginesim
-        SUFFIX .mjs
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bindings/js)
+        OUTPUT_NAME enginesim-glue
+        SUFFIX .js
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/js)
+
+    # The worklet is delivered as one file: glue with the wasm inlined as
+    # base64, plus the processor. addModule() then needs no network at all,
+    # which is the only thing that works in a worklet scope.
+    set(WORKLET ${CMAKE_CURRENT_SOURCE_DIR}/bindings/js/enginesim-worklet.js)
+    add_custom_command(
+        OUTPUT ${WORKLET}
+        COMMAND ${CMAKE_COMMAND}
+                -DGLUE=${CMAKE_BINARY_DIR}/js/enginesim-glue.js
+                -DPROCESSOR=${CMAKE_CURRENT_SOURCE_DIR}/src/js/processor.js
+                -DOUT=${WORKLET}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/bundle_worklet.cmake
+        DEPENDS enginesim_wasm
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/js/processor.js
+                ${CMAKE_CURRENT_SOURCE_DIR}/cmake/bundle_worklet.cmake
+        COMMENT "Bundling AudioWorklet"
+        VERBATIM)
+    add_custom_target(worklet ALL DEPENDS ${WORKLET})
 else()
     add_executable(enginesim_smoke tests/smoke.c)
     target_link_libraries(enginesim_smoke PRIVATE enginesim)
