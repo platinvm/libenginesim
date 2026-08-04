@@ -6,20 +6,13 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Only GitHub's own actions are used here. An engine simulator does not need a
-# supply chain of third-party CI actions.
-env:
-  # Pinned, because the committed worklet bundle is compared byte for byte
-  # against a fresh build. Bump this and the bundle together.
-  EMSDK_VERSION: 6.0.5
-
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  native:
-    name: Native build and tests
+  build:
+    name: Build and test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -41,77 +34,33 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-      # The header is the product, so it has to stay clean C and clean C++.
+      # The header is the product, so it is checked as one rather than only as
+      # a side effect of building the library.
       - name: Check the header compiles standalone
         run: |
           for std in c99 c11 c17; do
-            echo "#include \"enginesim.h\"" > /tmp/h.c
-            echo "int main(void){return (int)es_abi_version();}" >> /tmp/h.c
+            printf '#include "enginesim.h"\nint main(void){return (int)es_abi_version();}\n' > /tmp/h.c
             gcc -std=$std -Wall -Wextra -Wpedantic -Iinclude -c /tmp/h.c -o /dev/null
           done
           for std in c++11 c++17; do
-            echo '#include "enginesim.h"' > /tmp/h.cpp
-            echo 'int main(){return (int)es_abi_version();}' >> /tmp/h.cpp
+            printf '#include "enginesim.h"\nint main(){return (int)es_abi_version();}\n' > /tmp/h.cpp
             g++ -std=$std -Wall -Wextra -Wpedantic -Iinclude -c /tmp/h.cpp -o /dev/null
           done
-
-  wasm:
-    name: WebAssembly build and worklet tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Check out upstream
-        run: |
-          git submodule update --init vendor/engine-sim
-          git -C vendor/engine-sim submodule update --init \
-              dependencies/submodules/simple-2d-constraint-solver
-
-      - name: Cache the Emscripten SDK
-        id: emsdk-cache
-        uses: actions/cache@v6
-        with:
-          path: ~/emsdk
-          key: emsdk-${{ env.EMSDK_VERSION }}
-
-      - name: Install the Emscripten SDK
-        if: steps.emsdk-cache.outputs.cache-hit != 'true'
-        run: |
-          git clone --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk
-          ~/emsdk/emsdk install ${{ env.EMSDK_VERSION }}
-          ~/emsdk/emsdk activate ${{ env.EMSDK_VERSION }}
-
-      # The committed bundle is what the demo and the npm package ship, so it
-      # must match its sources. The build is byte-reproducible at a pinned
-      # emsdk, so an exact comparison is the honest check.
-      - name: Build and verify the committed bundle is current
-        run: |
-          source ~/emsdk/emsdk_env.sh
-          cp bindings/js/enginesim-worklet.js /tmp/committed.js
-          emcmake cmake -B build-wasm -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-wasm -j$(nproc)
-          if ! cmp -s /tmp/committed.js bindings/js/enginesim-worklet.js; then
-            echo "::error::bindings/js/enginesim-worklet.js is stale."
-            echo "Rebuild with emsdk ${{ env.EMSDK_VERSION }} and commit the result."
-            cmp /tmp/committed.js bindings/js/enginesim-worklet.js || true
-            exit 1
-          fi
-          echo "bundle is current"
 
       - uses: actions/setup-node@v7
         with:
           node-version: 22
 
-      # Runs the bundle in a bare AudioWorkletGlobalScope lookalike: no window,
-      # self, document, fetch or performance. That absence is what catches the
-      # bugs a normal Node or browser run hides.
+      # Exercises the committed bundle the demo actually serves, in a bare
+      # AudioWorkletGlobalScope lookalike: no window, self, document, fetch or
+      # performance. Two seconds, no Emscripten toolchain needed.
       - name: Worklet tests
         run: node tests/worklet.mjs
 
   pages:
     name: Deploy the demo
     if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
-    needs: [native, wasm]
+    needs: build
     runs-on: ubuntu-latest
     # A half-finished deploy is worse than a queued one, so this group does not
     # cancel, unlike the workflow-level one above.

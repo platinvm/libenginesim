@@ -1,7 +1,6 @@
 # libenginesim
 
 [![CI](https://github.com/platinvm/libenginesim/actions/workflows/ci.yml/badge.svg)](https://github.com/platinvm/libenginesim/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/libenginesim)](https://www.npmjs.com/package/libenginesim)
 
 [AngeTheGreat's engine-sim](https://github.com/ange-yaghi/engine-sim) as a
 headless C library: a piston engine you can step, read and pull audio from,
@@ -36,15 +35,13 @@ python3 -m http.server 8000
 
 Then open <http://localhost:8000>.
 
-## Install
+## Using it
 
-```sh
-npm install libenginesim
-```
-
-No runtime dependencies, and none are possible: the wasm is inlined into the
-worklet bundle, so nothing is fetched at run time. The package also ships
-`include/enginesim.h`, so the tarball carries the ABI it is a binding for.
+Not published anywhere yet — take the repository and point at
+`bindings/js/enginesim.js`, or link `build/libenginesim.a` against
+`include/enginesim.h`. There are no runtime dependencies, and none are
+possible: the wasm is inlined into the worklet bundle, so nothing is fetched
+at run time.
 
 ## Using the C ABI
 
@@ -133,13 +130,14 @@ cmake --build build-wasm -j
 ```
 
 This regenerates `bindings/js/enginesim-worklet.js` in the source tree, which
-is the file the demo loads and the npm package ships. It is committed so both
-work from a bare clone.
+is the file the demo loads. It is committed so the demo works from a bare
+clone — see [The committed bundle](#the-committed-bundle) for what that
+obliges you to do after changing `src/`.
 
-Use **Emscripten 6.0.5**, the version pinned in the workflows. The build is
-byte-reproducible, and CI compares the rebuilt bundle against the committed
-one exactly, so a different toolchain version will fail the check even when
-the output is perfectly good. See [Releasing](#releasing).
+The bundle here was built with **Emscripten 6.0.5**. The build is
+byte-reproducible at a given version, so rebuilding with that one and running
+`cmp` tells you whether the committed bundle is current; a different version
+will differ harmlessly in ways that make the comparison useless.
 
 Two constraints shape that build, both from the AudioWorklet global scope:
 
@@ -158,7 +156,7 @@ isolation headers.
 ## Using it from JavaScript
 
 ```js
-import { EngineSim, Preset } from 'libenginesim';
+import { EngineSim, Preset } from './bindings/js/enginesim.js';
 
 const engine = await EngineSim.create({ preset: Preset.V8 });
 await engine.resume();               // call from a user gesture
@@ -174,8 +172,8 @@ destination — connect it to your own nodes for effects or metering.
 with other audio. Types are in
 [`bindings/js/enginesim.d.ts`](bindings/js/enginesim.d.ts).
 
-Bundlers that rewrite asset URLs can reach the worklet at the `libenginesim/worklet`
-subpath. If yours does something unusual, pass `workletUrl` to `create()`.
+The binding finds the worklet next to itself via `import.meta.url`. If your
+bundler moves it somewhere else, pass `workletUrl` to `create()`.
 
 ## Tests
 
@@ -208,7 +206,7 @@ bindings/js/             the JavaScript binding and its built worklet bundle
 patches/                 portability fixes applied to a copy of upstream
 demo/                    the demo page: vanilla HTML, CSS and modules
 tests/                   native smoke test, worklet test, browser test
-.github/workflows/       build and test, deploy the demo, publish on a tag
+.github/workflows/ci.yml build and test, then deploy the demo
 vendor/engine-sim        upstream, as a submodule, byte for byte
 ```
 
@@ -216,24 +214,19 @@ Adding a second language means adding one directory under `bindings/`. There
 is nothing to generalise first, and deliberately no abstraction waiting for
 one.
 
-## Releasing
+## The committed bundle
 
-`bindings/js/enginesim-worklet.js` is a build artifact that is committed on
-purpose: it is what lets the demo and the npm package work without a
-toolchain. CI rebuilds it and compares byte for byte, so it cannot go stale
-unnoticed. That comparison is why `EMSDK_VERSION` is pinned in both workflows
-— bump the pin and the bundle in the same commit.
+`bindings/js/enginesim-worklet.js` is a build artifact checked into the
+repository on purpose: it is what lets the demo run from a bare clone, with
+no Emscripten and no toolchain. CI runs `tests/worklet.mjs` against exactly
+that file, so a bundle that does not work cannot reach the demo.
 
-To publish: bump `version` in `package.json`, commit, then push a matching
-tag.
-
-```sh
-git tag v0.1.1 && git push origin v0.1.1
-```
-
-The release workflow refuses to run if the tag and `package.json` disagree,
-rebuilds the bundle to confirm it matches the tagged sources, and publishes
-with npm provenance. It needs an `NPM_TOKEN` secret with publish rights.
+Nothing checks that it was built from the current sources, though. CI has no
+Emscripten in it, which is what keeps it to about two minutes. **After
+changing anything under `src/`, rebuild the bundle and commit it in the same
+commit** — otherwise the library and the demo drift apart silently. The build
+is byte-reproducible at a given Emscripten version, so a `cmp` against a
+fresh build is a reliable check when you want one.
 
 ## Upstream, and why it is patched
 

@@ -1,6 +1,7 @@
 {
   "name": "libenginesim",
   "version": "0.1.0",
+  "private": true,
   "description": "A headless piston engine simulator: real-time combustion, gas flow and audio synthesis in an AudioWorklet. WebAssembly build of AngeTheGreat's engine-sim behind a stable C ABI.",
   "type": "module",
   "license": "MIT",
@@ -40,10 +41,6 @@
     "include/enginesim.h"
   ],
   "sideEffects": false,
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
   "scripts": {
     "test": "node tests/worklet.mjs",
     "test:browser": "node tests/demo.browser.mjs"
