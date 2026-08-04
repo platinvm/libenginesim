@@ -7,6 +7,7 @@
 #include "transmission.h"
 #include "vehicle.h"
 #include "gas_system.h"
+#include "constants.h"
 #include "units.h"
 
 #include <algorithm>
@@ -312,7 +313,10 @@ extern "C" void es_sim_telemetry(const es_sim *sim, es_telemetry *out) {
     out->torque = s->sim.getFilteredDynoTorque();
     out->power = s->sim.getDynoPower();
     out->throttle = s->throttle;
-    out->throttle_plate_position = e.getThrottlePlateAngle();
+    /* getThrottlePlateAngle() is an angle in radians from shut to wide open;
+     * the ABI promises a 0..1 fraction. */
+    out->throttle_plate_position =
+        e.getThrottlePlateAngle() / (constants::pi / 2);
     out->manifold_pressure = e.getManifoldPressure();
     out->intake_afr = e.getIntakeAfr();
     out->exhaust_o2 = e.getExhaustO2();
