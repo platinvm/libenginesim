@@ -128,8 +128,7 @@ if(EMSCRIPTEN)
         _es_sim_set_dyno _es_sim_set_volume _es_sim_telemetry
         _es_js_sizeof_engine_def _es_js_sizeof_sim_config _es_js_sizeof_telemetry
         _es_js_alloc _es_js_free _es_js_telemetry_get
-        _es_js_preset _es_js_preset_name _es_js_def_redline
-        _es_js_def_set_simulation_frequency
+        _es_js_preset _es_js_def_redline
         _malloc _free)
     list(JOIN ES_EXPORTS "," ES_EXPORTS_CSV)
 

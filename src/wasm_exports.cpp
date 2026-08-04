@@ -68,27 +68,14 @@ EMSCRIPTEN_KEEPALIVE double es_js_telemetry_get(const es_telemetry *t, uint32_t 
     }
 }
 
-/*
- * Builds a preset into caller-allocated storage and reports the engine's
- * name, which is otherwise a pointer the host cannot follow safely.
- */
+/* Builds a preset into caller-allocated storage. */
 EMSCRIPTEN_KEEPALIVE es_result es_js_preset(uint32_t preset, es_engine_def *out) {
     return es_preset_engine((es_preset)preset, out);
 }
 
-EMSCRIPTEN_KEEPALIVE const char *es_js_preset_name(uint32_t preset) {
-    return es_preset_name((es_preset)preset);
-}
-
-/* Redline and cylinder count before a simulation exists, for UI ranges. */
+/* Redline before a simulation exists, so a UI can scale its gauges. */
 EMSCRIPTEN_KEEPALIVE double es_js_def_redline(const es_engine_def *def) {
     return (def != nullptr) ? def->redline : 0.0;
-}
-
-/* The one field a demo plausibly wants to change on a preset. */
-EMSCRIPTEN_KEEPALIVE void es_js_def_set_simulation_frequency(es_engine_def *def,
-                                                             uint32_t hz) {
-    if (def != nullptr) def->simulation_frequency = hz;
 }
 
 } /* extern "C" */
