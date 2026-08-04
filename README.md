@@ -270,8 +270,19 @@ These are real and unfixed, not roadmap items dressed up as features.
   before the ABI's float conversion sees them. Measured on the V8 at wide-open
   throttle: 2.6% of samples at full scale with volume 1.0, 0.007% at 0.7. The
   demo ships at 0.7 for that reason. Leave headroom.
+- **One built-in impulse response, shared by every engine.** Upstream pairs
+  each engine with its own, and a response's energy and the exhaust
+  `audio_volume` set against it only mean anything together. So upstream's
+  literal mix levels do not transfer: the inline-4's are 64× its upstream
+  values, measured against the shipped response. Build an engine with
+  upstream's numbers verbatim and it may come out inaudible or clipped —
+  check it against the leveling filter's target and scale from there.
 - **Two presets**, the V8 and the inline-4, transcribed from upstream's
   definitions. Anything else you build by hand.
+- **`es_engine_def.flywheel_radius` is not read by anything.** Upstream's
+  `Crankshaft::Parameters` has no such field; only `crank_moment_of_inertia`
+  reaches the physics, and the presets use the radius purely to compute it.
+  The field is inert and should come out of the ABI before it has consumers.
 - **The dyno is the only load.** A vehicle and transmission exist inside the
   simulation, but no gear or clutch control is exposed, so there is no way to
   drive the engine through a drivetrain.

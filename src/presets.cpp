@@ -126,17 +126,32 @@ const double i4_timing_y[] = {
 
 const double i4_rod_journals[] = { deg(0), deg(180), deg(180), deg(0) };
 
+/*
+ * audio_volume is 64x upstream's 0.25 and 0.5, keeping its 1:2 ratio.
+ *
+ * Upstream pairs this engine with a different impulse response from the V8's,
+ * and each response carries its own energy, so upstream's mix levels are only
+ * meaningful next to the response they were set against. This library ships
+ * one built-in response for every engine, which leaves the levels to be
+ * renormalised against it. Upstream's literal values here put idle around
+ * 1/70th of the V8's, far below the leveling filter's target - and that filter
+ * only ever attenuates, so nothing downstream brings it back up. Measured
+ * against the shipped response, 64x puts idle at 0.31 RMS against the V8's
+ * 0.34, still short of clipping. See "Known gaps" in the README.
+ */
 const es_exhaust_def i4_exhausts[] = {
-    { 0, inch(40.0), 0, 1.0, litres(10.0), 0, 0.25, inch(90.0) },
-    { 0, inch(40.0), 0, 1.0, litres(10.0), 0, 0.50, inch(120.0) }
+    { 0, inch(40.0), 0, 1.0, litres(10.0), 0, 16.0, inch(90.0) },
+    { 0, inch(40.0), 0, 1.0, litres(10.0), 0, 32.0, inch(120.0) }
 };
 
-/* Cylinders 1 and 3 share one collector, 2 and 4 the other. */
+/* Cylinders 1 and 3 share one collector, 2 and 4 the other. Blowby is filled
+ * in at first use: k_28inH2O is not a constant-expression. */
+const double i4_blowby_cfm[] = { 0.001, 0.002, 0.001, 0.002 };
 const es_cylinder_def i4_cylinders[] = {
     { 0, 0, 0.9, inch(10.0), 0.0 },
     { 1, 1, 0.8, inch(10.0), 0.0 },
     { 2, 0, 1.1, inch(10.0), 0.0 },
-    { 3, 1, 1.0, inch(10.0), 0.0 }
+    { 3, 1, 0.9, inch(10.0), 0.0 }
 };
 
 const uint32_t i4_firing_order[] = { 0, 1, 3, 2 };
@@ -225,23 +240,25 @@ es_engine_def make_v8() {
 
 es_engine_def make_i4() {
     const double stroke = units::distance(65.0, units::mm);
-    const double rodLength = units::distance(97.5, units::mm);
+    const double rodLength = inch(4.705);
     const double rodMass = grams(395.837);
-    const double crankMass = pounds(20.0);
-    const double flywheelMass = pounds(6.0);
+    const double crankMass = pounds(24.8);
+    const double flywheelMass = pounds(10.0);
     const double flywheelRadius = inch(4.0);
 
     es_engine_def d = {};
     d.name = "Hayabusa Inline-4";
-    d.simulation_frequency = 10000;
+    /* Upstream runs this one at twice the usual rate. It revs to 11000 with
+     * only four cylinders, so the exhaust pulses are short and closely spaced;
+     * at 10 kHz they come out under-resolved and the engine barely sounds. */
+    d.simulation_frequency = 20000;
     d.bore = units::distance(81.0, units::mm);
     d.stroke = stroke;
     d.crank_mass = crankMass;
-    d.crank_moment_of_inertia =
-        1.5 * disk_moment(crankMass, stroke) +
-        disk_moment(flywheelMass, flywheelRadius) +
-        disk_moment(1.0, units::distance(1.0, units::cm));
-    d.crank_friction_torque = units::torque(5.0, units::ft_lb);
+    /* Upstream states this outright rather than deriving it from disks, and
+     * the value is far lower than the disk approximation gives. */
+    d.crank_moment_of_inertia = 0.22986844776863666 * 0.2;
+    d.crank_friction_torque = units::torque(1.0, units::ft_lb);
     d.flywheel_mass = flywheelMass;
     d.flywheel_radius = flywheelRadius;
     d.rod_mass = rodMass;
@@ -249,7 +266,7 @@ es_engine_def make_i4() {
     d.rod_moment_of_inertia = 0.0015884918028487504;
     d.rod_center_of_mass = 0.0;
     d.piston_mass = grams(303.5);
-    d.piston_compression_height = units::distance(30.0, units::mm);
+    d.piston_compression_height = inch(1.0);
     d.rod_journal_angles = i4_rod_journals;
     d.rod_journal_count = 4;
     d.banks = i4_banks;
@@ -261,17 +278,19 @@ es_engine_def make_i4() {
     d.intake_runner_length = inch(10.0);
     d.intake_idle_throttle_plate_position = 0.999;
     d.intake_velocity_decay = 0.5;
-    d.throttle_gamma = 1.0;
+    d.throttle_gamma = 2.0;
     d.firing_order = i4_firing_order;
     d.timing_curve = { i4_timing_x, i4_timing_y, 9, 1000.0 };
-    d.rev_limit = 11000.0;
+    d.rev_limit = 11300.0;
     d.rev_limit_duration = 0.1;
-    d.redline = 10500.0;
+    d.redline = 11000.0;
     d.starter_torque = units::torque(70.0, units::ft_lb);
-    d.starter_speed = 400.0;
-    d.hf_gain = 0.01;
-    d.jitter = 0.5;
-    d.noise = 1.0;
+    d.starter_speed = 500.0;
+    /* This engine's own synthesis character. The V8's numbers were sitting
+     * here, and they are nothing like it. */
+    d.hf_gain = 0.00407;
+    d.jitter = 0.062;
+    d.noise = 0.292;
     return d;
 }
 
@@ -294,6 +313,7 @@ extern "C" es_result es_preset_engine(es_preset preset, es_engine_def *out) {
     static es_engine_def i4 = {};
     static es_bank_def v8b[2];
     static es_bank_def i4b[1];
+    static es_cylinder_def i4c[4];
     static double v8_in[10], v8_ex[10], i4_in[7], i4_ex[7];
     static bool ready = false;
     if (!ready) {
@@ -325,6 +345,11 @@ extern "C" es_result es_preset_engine(es_preset preset, es_engine_def *out) {
         i4b[0] = i4_banks[0];
         i4b[0].intake_flow.y = converted_flow(i4_intake_flow_y, i4_in);
         i4b[0].exhaust_flow.y = converted_flow(i4_exhaust_flow_y, i4_ex);
+        for (int i = 0; i < 4; ++i) {
+            i4c[i] = i4_cylinders[i];
+            i4c[i].blowby = GasSystem::k_28inH2O(i4_blowby_cfm[i]);
+        }
+        i4b[0].cylinders = i4c;
         i4.banks = i4b;
         i4.intake_flow_rate = GasSystem::k_carb(800.0);
         i4.intake_runner_flow_rate = GasSystem::k_carb(300.0);
