@@ -1,0 +1,54 @@
+{
+  "name": "libenginesim",
+  "version": "0.1.0",
+  "description": "A headless piston engine simulator: real-time combustion, gas flow and audio synthesis in an AudioWorklet. WebAssembly build of AngeTheGreat's engine-sim behind a stable C ABI.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Alessandro Proietti <alessandro.proietti.dev@gmail.com>",
+  "homepage": "https://platinvm.github.io/libenginesim/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/platinvm/libenginesim.git"
+  },
+  "bugs": {
+    "url": "https://github.com/platinvm/libenginesim/issues"
+  },
+  "keywords": [
+    "engine",
+    "simulation",
+    "audio",
+    "webaudio",
+    "audioworklet",
+    "wasm",
+    "webassembly",
+    "synthesis",
+    "physics"
+  ],
+  "types": "./bindings/js/enginesim.d.ts",
+  "exports": {
+    ".": {
+      "types": "./bindings/js/enginesim.d.ts",
+      "default": "./bindings/js/enginesim.js"
+    },
+    "./worklet": "./bindings/js/enginesim-worklet.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bindings/js/enginesim.js",
+    "bindings/js/enginesim.d.ts",
+    "bindings/js/enginesim-worklet.js",
+    "include/enginesim.h"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "test": "node tests/worklet.mjs",
+    "test:browser": "node tests/demo.browser.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.0"
+  }
+}
