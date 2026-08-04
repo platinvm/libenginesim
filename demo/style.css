@@ -1,0 +1,310 @@
+/* libenginesim demo. Vanilla CSS; no build step, no dependencies. */
+
+:root {
+  color-scheme: dark;
+
+  --bg: #0c0d10;
+  --panel: #15171c;
+  --panel-2: #1c1f26;
+  --line: #282c35;
+  --text: #e8eaef;
+  --muted: #8d93a1;
+  --accent: #ff8a3d;
+  --accent-2: #ffd24a;
+  --danger: #ff4d4d;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100dvh;
+  padding: clamp(1rem, 4vw, 3rem) 1rem 3rem;
+  background-image:
+    radial-gradient(60rem 30rem at 50% -12rem, #2a1c12 0%, transparent 70%);
+}
+
+main {
+  max-width: 60rem;
+  margin: 0 auto;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* ---------------------------------------------------------------- header */
+
+header { text-align: center; margin-bottom: 2rem; }
+
+h1 {
+  margin: 0 0 .5rem;
+  font-size: clamp(1.9rem, 5vw, 2.8rem);
+  letter-spacing: -0.02em;
+  font-weight: 650;
+  background: linear-gradient(100deg, var(--accent-2), var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.sub {
+  margin: 0 auto;
+  max-width: 44rem;
+  color: var(--muted);
+  font-size: .975rem;
+}
+
+/* ----------------------------------------------------------------- stage */
+
+.stage {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: clamp(1rem, 3vw, 2rem);
+  box-shadow: 0 1px 0 #ffffff0a inset, 0 20px 50px -30px #000;
+}
+
+.gauges {
+  display: grid;
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+  gap: clamp(1rem, 3vw, 2.5rem);
+  align-items: center;
+}
+
+@media (max-width: 40rem) {
+  .gauges { grid-template-columns: 1fr; justify-items: center; }
+}
+
+/* ------------------------------------------------------------------ tach */
+
+.tach { position: relative; width: 100%; max-width: 15rem; }
+.tach svg { width: 100%; height: auto; display: block; }
+
+.tach-track,
+.tach-redline,
+.tach-value {
+  fill: none;
+  stroke-linecap: round;
+  /* Three-quarter dial: start at the lower left, sweep clockwise. */
+  transform: rotate(135deg);
+  transform-origin: 100px 100px;
+}
+
+/* r=82 -> circumference 515.2; 75% of it is the live arc. */
+.tach-track   { stroke: #23262e; stroke-width: 14; stroke-dasharray: 386.4 515.2; }
+.tach-redline { stroke: #4a1f22; stroke-width: 14; stroke-dasharray: 0 515.2; }
+.tach-value {
+  stroke: url(#sweep);
+  stroke-width: 14;
+  stroke-dasharray: 0 515.2;
+  transition: stroke-dasharray 90ms linear;
+}
+.tach.over .tach-value { stroke: var(--danger); }
+
+.tach-tick { stroke: #3a3f4b; stroke-width: 2; }
+.tach-tick-label { fill: var(--muted); font-size: 9px; text-anchor: middle; }
+
+.tach-num {
+  fill: var(--text);
+  font-size: 29px;
+  font-weight: 600;
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+}
+.tach-unit { fill: var(--muted); font-size: 11px; text-anchor: middle; letter-spacing: .16em; }
+
+.limiter {
+  position: absolute;
+  left: 50%; bottom: 8%;
+  transform: translateX(-50%);
+  color: var(--danger);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  animation: blink .4s steps(2, start) infinite;
+}
+@keyframes blink { to { visibility: hidden; } }
+
+/* --------------------------------------------------------------- readout */
+
+.readout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 1.25rem 1.5rem;
+  margin: 0;
+  width: 100%;
+}
+.readout > div {
+  border-left: 2px solid var(--line);
+  padding-left: .75rem;
+}
+.readout dt {
+  color: var(--muted);
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.readout dd {
+  margin: .1rem 0 0;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 550;
+}
+
+/* -------------------------------------------------------------- controls */
+
+.controls {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 1.25rem;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+  align-items: end;
+}
+.row.primary { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
+
+.field { display: grid; gap: .4rem; margin: 0; padding: 0; border: 0; min-width: 0; }
+.field-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--muted);
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  padding: 0;
+}
+.field-label output { color: var(--text); font-variant-numeric: tabular-nums; }
+.hint { color: #6c7280; font-size: .72rem; }
+kbd {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 .3em;
+  font-size: .95em;
+}
+
+/* --------------------------------------------------------------- buttons */
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 550;
+  padding: .7rem 1rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, transform 60ms;
+  touch-action: manipulation;
+  user-select: none;
+}
+.btn:hover:not(:disabled) { background: #232730; border-color: #39404d; }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn-primary {
+  background: linear-gradient(180deg, #ff9a52, #f2762a);
+  border-color: #ff9a52;
+  color: #24150a;
+}
+.btn-primary:hover:not(:disabled) { background: linear-gradient(180deg, #ffab6d, #ff8438); }
+
+.btn.cranking { background: #3a2a16; border-color: var(--accent); color: var(--accent-2); }
+.btn[aria-pressed="false"] { color: var(--muted); }
+
+.segmented { display: flex; gap: .35rem; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: .25rem; }
+.seg {
+  flex: 1;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 550;
+  padding: .45rem .5rem;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.seg:hover:not(:disabled) { color: var(--text); }
+.seg.active { background: #333846; color: var(--text); }
+.seg:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---------------------------------------------------------------- slider */
+
+input[type="range"] {
+  appearance: none;
+  width: 100%;
+  height: 1.5rem;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]:disabled { opacity: .45; cursor: not-allowed; }
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px; height: 18px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #1a1206;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #1a1206;
+}
+input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- status */
+
+.status {
+  margin: 1.5rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .875rem;
+  min-height: 1.5rem;
+}
+.status.error { color: var(--danger); }
+
+footer { margin-top: 2rem; text-align: center; color: #6c7280; font-size: .8rem; }
+footer a { color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

@@ -106,6 +106,13 @@ export class EngineSim {
   /** The AudioContext driving the engine. */
   get context() { return this.#context; }
 
+  /**
+   * The engine's output node, already connected to the destination. Connect it
+   * to your own nodes to run the sound through effects or metering.
+   * @type {AudioWorkletNode}
+   */
+  get output() { return this.#node; }
+
   /** Most recent telemetry, or null before the first frame. @type {?Telemetry} */
   get telemetry() { return this.#telemetry; }
 

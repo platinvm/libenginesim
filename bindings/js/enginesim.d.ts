@@ -44,6 +44,9 @@ export declare class EngineSim {
   static create(options?: EngineSimOptions): Promise<EngineSim>;
 
   readonly context: AudioContext;
+  /** Output node, already connected to the destination. Connect it to your
+   *  own nodes to run the sound through effects or metering. */
+  readonly output: AudioWorkletNode;
   readonly telemetry: Telemetry | null;
 
   resume(): Promise<void>;

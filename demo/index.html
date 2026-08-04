@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>libenginesim</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🔧</text></svg>">
+</head>
+<body>
+
+<main>
+  <header>
+    <h1>libenginesim</h1>
+    <p class="sub">
+      AngeTheGreat&rsquo;s engine simulator as a headless C library, running in
+      an AudioWorklet. Every sound on this page is combustion, gas flow and
+      convolution computed a sample at a time &mdash; no recordings.
+    </p>
+  </header>
+
+  <section class="stage" aria-labelledby="engine-heading">
+    <h2 id="engine-heading" class="visually-hidden">Engine</h2>
+
+    <div class="gauges">
+      <div class="tach">
+        <svg viewBox="0 0 200 172" role="img" aria-label="Tachometer">
+          <defs>
+            <linearGradient id="sweep" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%"   stop-color="var(--accent)"/>
+              <stop offset="100%" stop-color="var(--accent-2)"/>
+            </linearGradient>
+          </defs>
+          <circle class="tach-track" cx="100" cy="100" r="82"/>
+          <circle class="tach-redline" cx="100" cy="100" r="82" id="tach-redline"/>
+          <circle class="tach-value" cx="100" cy="100" r="82" id="tach-value"/>
+          <g id="tach-ticks"></g>
+          <text class="tach-num"   x="100" y="98" id="rpm-text">0</text>
+          <text class="tach-unit"  x="100" y="117">RPM</text>
+        </svg>
+        <div class="limiter" id="limiter" hidden>REV LIMIT</div>
+      </div>
+
+      <dl class="readout">
+        <div><dt>Engine</dt><dd id="r-engine">&mdash;</dd></div>
+        <div><dt>Displacement</dt><dd id="r-disp">&mdash;</dd></div>
+        <div><dt>Torque</dt><dd id="r-torque">&mdash;</dd></div>
+        <div><dt>Power</dt><dd id="r-power">&mdash;</dd></div>
+        <div><dt>Manifold</dt><dd id="r-map">&mdash;</dd></div>
+        <div><dt>Throttle</dt><dd id="r-throttle">&mdash;</dd></div>
+      </dl>
+    </div>
+
+    <div class="controls">
+      <div class="row primary">
+        <button id="power" class="btn btn-primary" type="button">Start audio</button>
+        <button id="starter" class="btn" type="button" disabled>
+          Hold to crank
+        </button>
+        <button id="ignition" class="btn" type="button" disabled aria-pressed="true">
+          Ignition on
+        </button>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span class="field-label">
+            Throttle <output id="throttle-out">0%</output>
+          </span>
+          <input id="throttle" type="range" min="0" max="100" value="0" disabled>
+          <span class="hint">Hold <kbd>Space</kbd> for wide open</span>
+        </label>
+
+        <label class="field">
+          <span class="field-label">
+            Volume <output id="volume-out">70%</output>
+          </span>
+          <input id="volume" type="range" min="0" max="100" value="70" disabled>
+          <span class="hint">Engines are loud. Start low.</span>
+        </label>
+      </div>
+
+      <div class="row">
+        <fieldset class="field">
+          <legend class="field-label">Engine</legend>
+          <div class="segmented" id="presets" role="group">
+            <button type="button" data-preset="1" class="seg active" disabled>V8</button>
+            <button type="button" data-preset="0" class="seg" disabled>Inline-4</button>
+          </div>
+        </fieldset>
+
+        <label class="field">
+          <span class="field-label">
+            Dyno <output id="dyno-out">off</output>
+          </span>
+          <input id="dyno" type="range" min="0" max="8000" step="100" value="0" disabled>
+          <span class="hint">Holds the crank so torque can be read</span>
+        </label>
+      </div>
+    </div>
+
+    <p class="status" id="status" role="status">
+      Press <strong>Start audio</strong>, then hold <strong>crank</strong> until it catches.
+    </p>
+  </section>
+
+  <footer>
+    <p>
+      Physics and audio synthesis by
+      <a href="https://github.com/ange-yaghi/engine-sim">AngeTheGreat</a>, MIT.
+      Wrapped as a C ABI and compiled to WebAssembly by libenginesim.
+    </p>
+  </footer>
+</main>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
