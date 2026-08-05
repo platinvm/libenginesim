@@ -55,9 +55,12 @@ const check = (ok: boolean, what: string): void => {
 };
 
 await page.goto(base, { waitUntil: 'networkidle' });
-await page.click('#power');
+/* No click: the page starts its own audio and cranks itself. */
 await page.waitForFunction(() => !(document.getElementById('starter') as HTMLButtonElement).disabled,
                            null, { timeout: 60000 });
+await page.waitForFunction(() => ((globalThis as any).engineSim?.telemetry?.rpm ?? 0) > 300,
+                           null, { timeout: 30000 });
+check(true, 'the page starts and cranks itself with no interaction');
 
 check(wasmRequests.length === 1, `wasm fetched as its own file (${wasmRequests.length} request)`);
 
@@ -119,7 +122,8 @@ await page.evaluate(() => {
   const edited = text.replace(/redline: [\d.]+/, 'redline: 4000');
   view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: edited } });
 });
-await page.waitForTimeout(2500);
+/* The rebuild motors the engine for a second before it catches. */
+await page.waitForTimeout(5000);
 const afterEdit = await page.evaluate(() => ({
   rpm: (globalThis as any).engineSim.telemetry?.rpm ?? 0,
   redline: (globalThis as any).engineSim.telemetry?.redline ?? 0,

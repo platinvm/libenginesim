@@ -5,19 +5,19 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(UPSTREAM ${CMAKE_CURRENT_SOURCE_DIR}/vendor/engine-sim)
+set(UPSTREAM ${CMAKE_CURRENT_SOURCE_DIR}/core/vendor/engine-sim)
 set(SOLVER_REL dependencies/submodules/simple-2d-constraint-solver)
 
 if(NOT EXISTS ${UPSTREAM}/CMakeLists.txt)
     message(FATAL_ERROR
         "vendor/engine-sim is empty. Run:\n"
-        "  git submodule update --init vendor/engine-sim\n"
-        "  git -C vendor/engine-sim submodule update --init ${SOLVER_REL}")
+        "  git submodule update --init core/vendor/engine-sim\n"
+        "  git -C core/vendor/engine-sim submodule update --init ${SOLVER_REL}")
 endif()
 if(NOT EXISTS ${UPSTREAM}/${SOLVER_REL}/CMakeLists.txt)
     message(FATAL_ERROR
         "The constraint solver is missing. Run:\n"
-        "  git -C vendor/engine-sim submodule update --init ${SOLVER_REL}")
+        "  git -C core/vendor/engine-sim submodule update --init ${SOLVER_REL}")
 endif()
 
 # ---------------------------------------------------------------------------

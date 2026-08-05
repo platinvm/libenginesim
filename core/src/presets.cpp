@@ -196,7 +196,8 @@ es_engine_def make_v8() {
 
     es_engine_def d = {};
     d.name = "GM LS V8";
-    d.simulation_frequency = 10000;
+    /* Upstream's 10000 runs at 0.91x real time in an audio callback. */
+    d.simulation_frequency = 4000;
     d.bore = inch(3.78);
     d.stroke = stroke;
     d.crank_mass = crankMass;
@@ -248,10 +249,12 @@ es_engine_def make_i4() {
 
     es_engine_def d = {};
     d.name = "Hayabusa Inline-4";
-    /* Upstream runs this one at twice the usual rate. It revs to 11000 with
-     * only four cylinders, so the exhaust pulses are short and closely spaced;
-     * at 10 kHz they come out under-resolved and the engine barely sounds. */
-    d.simulation_frequency = 20000;
+    /* Upstream runs this one at 20 kHz - it revs to 11000 with only four
+     * cylinders, so the pulses are short and closely spaced. That costs more
+     * than an audio callback can afford: measured at 0.72x real time, which
+     * glitches continuously. 8 kHz keeps it comfortably ahead. See "Known
+     * gaps" in the README. */
+    d.simulation_frequency = 6000;
     d.bore = units::distance(81.0, units::mm);
     d.stroke = stroke;
     d.crank_mass = crankMass;

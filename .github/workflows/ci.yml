@@ -25,8 +25,8 @@ jobs:
       # none of which this library compiles.
       - name: Check out upstream
         run: |
-          git submodule update --init vendor/engine-sim
-          git -C vendor/engine-sim submodule update --init \
+          git submodule update --init core/vendor/engine-sim
+          git -C core/vendor/engine-sim submodule update --init \
               dependencies/submodules/simple-2d-constraint-solver
 
       - name: Build and test
@@ -56,8 +56,8 @@ jobs:
 
       - name: Check out upstream
         run: |
-          git submodule update --init vendor/engine-sim
-          git -C vendor/engine-sim submodule update --init \
+          git submodule update --init core/vendor/engine-sim
+          git -C core/vendor/engine-sim submodule update --init \
               dependencies/submodules/simple-2d-constraint-solver
 
       - name: Cache the Emscripten SDK

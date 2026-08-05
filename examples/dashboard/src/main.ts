@@ -9,8 +9,8 @@
 import { EditorView, basicSetup } from 'codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { EngineSim, units } from '../../../bindings/js/src/enginesim.ts';
-import type { EngineDef, Preset, Telemetry } from '../../../bindings/js/src/types.ts';
+import { EngineSim, units } from 'libenginesim';
+import type { EngineDef, Preset, Telemetry } from 'libenginesim/types';
 import { toSource, fromSource } from './serialize.ts';
 import './style.css';
 
@@ -36,6 +36,8 @@ let redline = 6500;
 let displayedRpm = 0;
 let dynoOn = false;
 let activePreset = 0;
+/* Lowest speed seen while running: the engine's own idle, whatever it is. */
+let idleRpm = 700;
 
 /* ---------------------------------------------------------------- editor */
 
@@ -154,22 +156,70 @@ function loadPreset(presets: readonly Preset[], index: number): void {
   editor.dispatch({
     changes: { from: 0, to: editor.state.doc.length, insert: toSource(preset.def) },
   });
-  ui.dyno.value = '0';
+  ui.dyno.value = "0";
   dynoOn = false;
   ui.dynoOut.textContent = 'off';
   applyThrottle(0);
   rebuild();
 }
 
-async function start() {
-  ui.power.disabled = true;
+/* Cranks until it catches, the way you would, then lets go. */
+function autoCrank(): void {
+  if (!engine) return;
+  crank(true);
+  const started = performance.now();
+  const poll = setInterval(() => {
+    const caught = (engine?.telemetry?.rpm ?? 0) > 500;
+    if (caught || performance.now() - started > 4000) {
+      clearInterval(poll);
+      crank(false);
+      setStatus(caught
+        ? 'Edit the engine on the left. Hold <strong>Space</strong> for wide open.'
+        : 'It did not catch. Hold <strong>crank</strong> to try again.');
+    }
+  }, 100);
+}
+
+/*
+ * Browsers refuse to start audio until the page has been interacted with. Try
+ * anyway - a context is often allowed to start if the visitor has been here
+ * before - and fall back to starting on the first gesture, whatever it is,
+ * rather than making a button click the price of admission.
+ */
+async function armAudio(): Promise<void> {
+  if (!engine) return;
+  await engine.resume().catch(() => {});
+  if (engine.context.state === 'running') {
+    ui.power.hidden = true;
+    autoCrank();
+    return;
+  }
+  ui.power.hidden = false;
+  ui.power.disabled = false;
+  ui.power.textContent = 'Start audio';
+  setStatus('Your browser is holding the sound until you interact. Click anywhere.');
+  const onGesture = async (): Promise<void> => {
+    window.removeEventListener('pointerdown', onGesture);
+    window.removeEventListener('keydown', onGesture);
+    await engine?.resume().catch(() => {});
+    ui.power.hidden = true;
+    autoCrank();
+  };
+  window.addEventListener('pointerdown', onGesture, { once: true });
+  window.addEventListener('keydown', onGesture, { once: true });
+}
+
+async function boot() {
   setStatus('Loading engine…');
   try {
     engine = await EngineSim.create({ preset: activePreset });
-    await engine.resume();
 
     engine.onTelemetry((t: Telemetry) => {
       if (t.redline && Math.abs(t.redline - redline) > 1) { redline = t.redline; layoutDial(); }
+      /* The engine's own idle, learned rather than assumed. */
+      if (!dynoOn && t.throttle_plate_position < 0.2 && t.rpm > 200) {
+        idleRpm = idleRpm === 0 ? t.rpm : Math.min(idleRpm, t.rpm) * 0.999 + t.rpm * 0.001;
+      }
       ui.rEngine.textContent = `${t.cylinder_count} cyl`;
       ui.rDisp.textContent = `${(t.displacement * 1000).toFixed(2)} L`;
       /* Torque and power are dyno measurements; they mean nothing with the
@@ -192,11 +242,10 @@ async function start() {
 
     setEnabled(true);
     engine.setVolume(Number(ui.volume.value) / 100);
-    ui.power.textContent = 'Running';
-    ui.power.classList.remove('btn-primary');
     setMessage(`Running ${first.name}.`, 'good');
-    setStatus('Hold <strong>crank</strong> until it catches, then use the throttle.');
+    await armAudio();
   } catch (err) {
+    ui.power.hidden = false;
     ui.power.disabled = false;
     setStatus(`Could not start: ${err instanceof Error ? err.message : String(err)}`, true);
     console.error(err);
@@ -210,7 +259,7 @@ function setStatus(html: string, isError = false): void {
 
 /* ----------------------------------------------------------------- wires */
 
-ui.power.addEventListener('click', start);
+ui.power.addEventListener('click', () => void armAudio());
 ui.apply.addEventListener('click', rebuild);
 
 ui.starter.addEventListener('pointerdown', (e) => {
@@ -242,10 +291,24 @@ ui.volume.addEventListener('input', () => {
   engine?.setVolume(Number(ui.volume.value) / 100);
 });
 
+/*
+ * The slider runs from this engine's idle to its rev limit, spaced
+ * logarithmically. Even steps in rpm put almost the whole travel up at the top
+ * where nothing interesting happens; even steps in ratio give the same
+ * proportional change everywhere, so the bottom of the range is usable.
+ */
+function dynoRpm(position: number): number {
+  const top = Math.max(idleRpm * 1.2, redline);
+  return idleRpm * (top / idleRpm) ** position;
+}
+
 ui.dyno.addEventListener('input', () => {
-  const rpm = Number(ui.dyno.value);
-  dynoOn = rpm > 0;
-  ui.dynoOut.textContent = dynoOn ? `${rpm.toLocaleString()} rpm` : 'off';
+  const position = Number(ui.dyno.value) / 1000;
+  dynoOn = position > 0;
+  const rpm = dynoRpm(position);
+  ui.dynoOut.textContent = dynoOn ? `${Math.round(rpm).toLocaleString()} rpm` : 'off';
+  /* Ramped rather than stepped: the dyno grabs the crank, and jumping it
+   * across a thousand rpm in one block is what makes it crack. */
   engine?.setDyno(dynoOn, rpm);
 });
 
@@ -275,8 +338,20 @@ window.addEventListener('keyup', (e) => {
 });
 
 editor.dispatch({
-  changes: { from: 0, to: editor.state.doc.length, insert: '// Press "Start audio" to load an engine.\n' },
+  changes: { from: 0, to: editor.state.doc.length, insert: '// Loading…\n' },
 });
+/*
+ * Nothing to listen to in a background tab, and the simulation is expensive
+ * enough that leaving it running is rude. The AudioContext keeps its state, so
+ * coming back resumes exactly where it left off.
+ */
+document.addEventListener('visibilitychange', () => {
+  if (!engine) return;
+  if (document.hidden) void engine.suspend();
+  else if (ui.power.hidden) void engine.resume();
+});
+
 layoutDial();
 drawRpm(0);
 animate();
+void boot();

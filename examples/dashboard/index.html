@@ -64,7 +64,7 @@
 
     <div class="controls">
       <div class="row primary">
-        <button id="power" class="btn btn-primary" type="button">Start audio</button>
+        <button id="power" class="btn btn-primary" type="button" hidden>Start audio</button>
         <button id="starter" class="btn" type="button" disabled>Hold to crank</button>
         <button id="ignition" class="btn" type="button" disabled aria-pressed="true">Ignition on</button>
       </div>
@@ -85,8 +85,8 @@
       <div class="row">
         <label class="field">
           <span class="field-label">Dyno <output id="dyno-out">off</output></span>
-          <input id="dyno" type="range" min="0" max="12000" step="100" value="0" disabled>
-          <span class="hint">Holds the crank so torque can be read</span>
+          <input id="dyno" type="range" min="0" max="1000" step="5" value="0" disabled>
+          <span class="hint">Idle to rev limit, log-spaced. Holds the crank so torque can be read.</span>
         </label>
       </div>
     </div>

@@ -1,0 +1,15 @@
+{
+  "name": "libenginesim",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser binding for libenginesim: build and run engines from JavaScript.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/enginesim.ts",
+    "./units": "./src/units.ts",
+    "./types": "./src/types.ts",
+    "./marshal": "./src/marshal.ts"
+  },
+  "files": ["src", "wasm"]
+}

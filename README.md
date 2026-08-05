@@ -15,10 +15,10 @@ binding, and a dashboard where you edit an engine and hear the change.
 ## Layout
 
 ```
-core/       the C library and its public header
+core/       the C library, its public header, and vendor/ (upstream, as a
+            submodule, byte for byte)
 bindings/   language bindings; js/ is the only one so far
 examples/   apps built on a binding; dashboard/ is the live editor
-vendor/     upstream engine-sim, as a submodule, byte for byte
 ```
 
 `core/include/enginesim.h` is the product: 16 functions and some plain structs.
@@ -32,8 +32,8 @@ drag in the renderer, the scripting engine and the video tooling, hundreds of
 megabytes this library never compiles:
 
 ```sh
-git submodule update --init vendor/engine-sim
-git -C vendor/engine-sim submodule update --init \
+git submodule update --init core/vendor/engine-sim
+git -C core/vendor/engine-sim submodule update --init \
     dependencies/submodules/simple-2d-constraint-solver
 ```
 
@@ -59,7 +59,7 @@ emcmake cmake -B build-wasm -DCMAKE_BUILD_TYPE=Release
 cmake --build build-wasm -j          # writes bindings/js/wasm/ and src/types.ts
 
 cd examples/dashboard
-npm install
+npm install          # links bindings/js as `libenginesim`
 npm run dev
 ```
 
@@ -115,10 +115,10 @@ detonate the engine on the first cycle.
 ## Using it from JavaScript
 
 ```ts
-import { EngineSim, units as u } from '../../bindings/js/src/enginesim.ts';
+import { EngineSim, units as u } from 'libenginesim';
 
 const engine = await EngineSim.create();
-await engine.resume();               // from a user gesture
+await engine.resume();               // may need a user gesture first
 
 engine.setStarter(true);
 engine.onTelemetry((t) => console.log(t.rpm));
@@ -216,6 +216,14 @@ never linked.
 - **`es_engine_def.flywheel_radius` is not read by anything.** Upstream's
   `Crankshaft::Parameters` has no such field; only `crank_moment_of_inertia`
   reaches the physics. The field is inert and should come out of the ABI.
+- **The simulation is barely faster than real time, and glitches.** Measured
+  in an audio callback with a 128-frame quantum (2.90 ms of budget per block):
+  at upstream's own rates the V8 ran at 0.91x real time and the inline-4 at
+  0.72x, so the audio thread could not fill every block and the output popped
+  continuously. Their simulation frequencies are now 4000 and 6000 Hz rather
+  than upstream's 10000 and 20000, which buys 1.27x and 1.58x. Occasional
+  blocks still overrun, and lowering the rate costs high-frequency detail in
+  the sound. This wants profiling, not another guess at a number.
 - **Two built-in engines**, the V8 and the inline-4. Anything else you write
   yourself — which is now the point.
 - **The dyno is the only load.** A vehicle and transmission exist inside the

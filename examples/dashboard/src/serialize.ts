@@ -1,5 +1,5 @@
-import type { EngineDef } from '../../../bindings/js/src/types.ts';
-import type { units } from '../../../bindings/js/src/units.ts';
+import type { EngineDef } from 'libenginesim/types';
+import type { units } from 'libenginesim/units';
 
 /**
  * Turns an engine definition into editable JavaScript source, and back.
