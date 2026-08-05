@@ -6,13 +6,16 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  EMSDK_VERSION: 6.0.5
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build and test
+  core:
+    name: Core library
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -26,13 +29,11 @@ jobs:
           git -C vendor/engine-sim submodule update --init \
               dependencies/submodules/simple-2d-constraint-solver
 
-      - name: Build
+      - name: Build and test
         run: |
           cmake -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build -j$(nproc)
-
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
+          ctest --test-dir build --output-on-failure
 
       # The header is the product, so it is checked as one rather than only as
       # a side effect of building the library.
@@ -40,27 +41,75 @@ jobs:
         run: |
           for std in c99 c11 c17; do
             printf '#include "enginesim.h"\nint main(void){return (int)es_abi_version();}\n' > /tmp/h.c
-            gcc -std=$std -Wall -Wextra -Wpedantic -Iinclude -c /tmp/h.c -o /dev/null
+            gcc -std=$std -Wall -Wextra -Wpedantic -Icore/include -c /tmp/h.c -o /dev/null
           done
           for std in c++11 c++17; do
             printf '#include "enginesim.h"\nint main(){return (int)es_abi_version();}\n' > /tmp/h.cpp
-            g++ -std=$std -Wall -Wextra -Wpedantic -Iinclude -c /tmp/h.cpp -o /dev/null
+            g++ -std=$std -Wall -Wextra -Wpedantic -Icore/include -c /tmp/h.cpp -o /dev/null
           done
+
+  web:
+    name: Binding and dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out upstream
+        run: |
+          git submodule update --init vendor/engine-sim
+          git -C vendor/engine-sim submodule update --init \
+              dependencies/submodules/simple-2d-constraint-solver
+
+      - name: Cache the Emscripten SDK
+        id: emsdk-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ env.EMSDK_VERSION }}
+
+      - name: Install the Emscripten SDK
+        if: steps.emsdk-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk
+          ~/emsdk/emsdk install ${{ env.EMSDK_VERSION }}
+          ~/emsdk/emsdk activate ${{ env.EMSDK_VERSION }}
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
 
-      # Exercises the committed bundle the demo actually serves, in a bare
-      # AudioWorkletGlobalScope lookalike: no window, self, document, fetch or
-      # performance. Two seconds, no Emscripten toolchain needed.
-      - name: Worklet tests
-        run: node tests/worklet.mjs
+      # Produces bindings/js/wasm/* and, from the same schema the marshaller
+      # reads, bindings/js/src/types.ts. Nothing generated is committed.
+      - name: Build the wasm module
+        run: |
+          source ~/emsdk/emsdk_env.sh
+          emcmake cmake -B build-wasm -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-wasm -j$(nproc)
+
+      - name: Install dependencies
+        working-directory: examples/dashboard
+        run: npm ci
+
+      # Type-checks the binding as well as the app, then round-trips every
+      # preset through the marshaller and builds an engine that was never one.
+      - name: Type-check and test
+        working-directory: examples/dashboard
+        run: npm test
+
+      - name: Build the dashboard
+        working-directory: examples/dashboard
+        run: npm run build
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dashboard
+          path: examples/dashboard/dist
+          retention-days: 7
 
   pages:
-    name: Deploy the demo
+    name: Deploy the dashboard
     if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
-    needs: build
+    needs: [core, web]
     runs-on: ubuntu-latest
     # A half-finished deploy is worse than a queued one, so this group does not
     # cancel, unlike the workflow-level one above.
@@ -74,19 +123,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v7
-
-      # The demo needs the page, the binding and the bundle, and nothing else.
-      # The layout has to match the repository so demo/app.js resolves
-      # ../bindings/js/enginesim.js the same way it does locally.
-      - name: Assemble the site
-        run: |
-          mkdir -p _site/bindings/js
-          cp index.html _site/
-          cp -r demo _site/
-          cp bindings/js/enginesim.js \
-             bindings/js/enginesim.d.ts \
-             bindings/js/enginesim-worklet.js _site/bindings/js/
+      - uses: actions/download-artifact@v8
+        with:
+          name: dashboard
+          path: _site
 
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5

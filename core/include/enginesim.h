@@ -332,6 +332,15 @@ ES_API void es_sim_set_ignition(es_sim *sim, int enabled);
  */
 ES_API void es_sim_set_dyno(es_sim *sim, int enabled, double speed);
 
+/*
+ * Sets the crankshaft's speed outright, in RPM.
+ *
+ * The physics never needs this. It is here so a host can swap a running engine
+ * for a different one without the sound stopping, by handing the replacement
+ * the speed its predecessor had. Passing 0 leaves the crank stationary.
+ */
+ES_API void es_sim_set_crank_speed(es_sim *sim, double rpm);
+
 /* Output gain applied after synthesis. 1.0 is unity. */
 ES_API void es_sim_set_volume(es_sim *sim, double volume);
 

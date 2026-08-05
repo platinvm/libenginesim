@@ -25,7 +25,7 @@ endif()
 # into the build tree and patch the copy, so the submodule stays pristine.
 # ---------------------------------------------------------------------------
 set(PATCHED ${CMAKE_BINARY_DIR}/upstream)
-set(PATCH_FILE ${CMAKE_CURRENT_SOURCE_DIR}/patches/0001-portability.patch)
+set(PATCH_FILE ${CMAKE_CURRENT_SOURCE_DIR}/core/patches/0001-portability.patch)
 set(PATCH_STAMP ${CMAKE_BINARY_DIR}/upstream.stamp)
 
 if(NOT EXISTS ${PATCH_STAMP} OR ${PATCH_FILE} IS_NEWER_THAN ${PATCH_STAMP})
@@ -88,13 +88,13 @@ file(GLOB SOLVER_SRC ${PATCHED}/${SOLVER_REL}/src/*.cpp)
 add_library(enginesim STATIC
     ${ES_CORE}
     ${SOLVER_SRC}
-    src/enginesim.cpp
-    src/engine_builder.cpp
-    src/presets.cpp
-    src/builtin_ir.cpp)
+    core/src/enginesim.cpp
+    core/src/engine_builder.cpp
+    core/src/presets.cpp
+    core/src/builtin_ir.cpp)
 
 target_include_directories(enginesim
-    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/core/include
     PRIVATE ${PATCHED}/include
             ${PATCHED}
             ${PATCHED}/dependencies/submodules
@@ -104,15 +104,16 @@ target_include_directories(enginesim
 # forgot to include and orders one that must precede another.
 target_compile_options(enginesim PRIVATE
     -D__forceinline=inline
-    -include ${CMAKE_CURRENT_SOURCE_DIR}/src/upstream_prelude.h)
+    -include ${CMAKE_CURRENT_SOURCE_DIR}/core/src/upstream_prelude.h)
 
 # Upstream is not warning-clean and is not ours to fix.
 target_compile_options(enginesim PRIVATE -w)
 
 if(EMSCRIPTEN)
-    # One self-contained .js with the wasm inlined as base64: the AudioWorklet
-    # global scope has no fetch(), so nothing may be loaded at runtime.
-    add_executable(enginesim_wasm src/wasm_exports.cpp)
+    # A real .wasm alongside an ES-module loader. The AudioWorklet scope has no
+    # fetch(), so the wasm bytes are fetched on the main thread and handed to
+    # the worklet as an ArrayBuffer; nothing here has to be self-contained.
+    add_executable(enginesim_wasm core/src/wasm_exports.cpp)
     target_link_libraries(enginesim_wasm PRIVATE enginesim)
 
     # The ABI functions live in a static library that nothing in this target
@@ -125,51 +126,51 @@ if(EMSCRIPTEN)
         _es_preset_engine _es_preset_name
         _es_sim_create _es_sim_destroy _es_sim_step
         _es_sim_set_throttle _es_sim_set_starter _es_sim_set_ignition
-        _es_sim_set_dyno _es_sim_set_volume _es_sim_telemetry
-        _es_js_sizeof_engine_def _es_js_sizeof_sim_config _es_js_sizeof_telemetry
-        _es_js_alloc _es_js_free _es_js_telemetry_get
-        _es_js_preset _es_js_def_redline
+        _es_sim_set_dyno _es_sim_set_volume _es_sim_telemetry _es_sim_set_crank_speed
+        _es_js_alloc _es_js_free _es_js_schema _es_js_preset_count
         _malloc _free)
     list(JOIN ES_EXPORTS "," ES_EXPORTS_CSV)
 
-    # EXPORT_ES6 is off on purpose: an AudioWorklet cannot import, so the glue
-    # has to be plain script text that can be concatenated with the processor.
     target_link_options(enginesim_wasm PRIVATE
         -sEXPORTED_FUNCTIONS=[${ES_EXPORTS_CSV}]
-        -sSINGLE_FILE=1
         -sMODULARIZE=1
-        -sEXPORT_ES6=0
+        -sEXPORT_ES6=1
         -sEXPORT_NAME=createEngineSim
         -sENVIRONMENT=web,worker
         -sALLOW_MEMORY_GROWTH=1
         -sFILESYSTEM=0
         -sDYNAMIC_EXECUTION=0
-        -sEXPORTED_RUNTIME_METHODS=['HEAPF32','HEAPU32']
+        -sEXPORTED_RUNTIME_METHODS=['HEAPF32','HEAPF64','HEAPU8','HEAPU32','UTF8ToString','stringToUTF8']
+        # How the worklet gets its wasm. It has no fetch, so the main thread
+        # fetches the bytes and passes them in. instantiateWasm is the hook that
+        # matters: an AudioWorkletGlobalScope has no URL constructor either, and
+        # Emscripten's default path builds one before it checks whether it
+        # already has the binary. Neither is in the default incoming API.
+        -sINCOMING_MODULE_JS_API=[instantiateWasm,wasmBinary,print,printErr,onAbort]
         -O3)
-    set_target_properties(enginesim_wasm PROPERTIES
-        OUTPUT_NAME enginesim-glue
-        SUFFIX .js
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/js)
 
-    # The worklet is delivered as one file: glue with the wasm inlined as
-    # base64, plus the processor. addModule() then needs no network at all,
-    # which is the only thing that works in a worklet scope.
-    set(WORKLET ${CMAKE_CURRENT_SOURCE_DIR}/bindings/js/enginesim-worklet.js)
-    add_custom_command(
-        OUTPUT ${WORKLET}
-        COMMAND ${CMAKE_COMMAND}
-                -DGLUE=${CMAKE_BINARY_DIR}/js/enginesim-glue.js
-                -DPROCESSOR=${CMAKE_CURRENT_SOURCE_DIR}/src/js/processor.js
-                -DOUT=${WORKLET}
-                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/bundle_worklet.cmake
-        DEPENDS enginesim_wasm
-                ${CMAKE_CURRENT_SOURCE_DIR}/src/js/processor.js
-                ${CMAKE_CURRENT_SOURCE_DIR}/cmake/bundle_worklet.cmake
-        COMMENT "Bundling AudioWorklet"
-        VERBATIM)
-    add_custom_target(worklet ALL DEPENDS ${WORKLET})
+    # Emitted straight into the web app's source tree, which is the only thing
+    # that consumes them. Both are generated, and both are gitignored.
+    set_target_properties(enginesim_wasm PROPERTIES
+        OUTPUT_NAME enginesim
+        SUFFIX .mjs
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bindings/js/wasm)
+
+    # The TypeScript types for an engine definition come from the same schema
+    # the marshaller reads, so they cannot drift from the C header. One build
+    # system owns every generated file.
+    find_program(NODE_EXECUTABLE NAMES node nodejs)
+    if(NODE_EXECUTABLE)
+        add_custom_command(TARGET enginesim_wasm POST_BUILD
+            COMMAND ${NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/bindings/js/scripts/generate-types.mjs
+            COMMENT "Generating bindings/js/src/types.ts from the struct schema"
+            VERBATIM)
+    else()
+        message(WARNING "node not found: bindings/js/src/types.ts will not be regenerated")
+    endif()
 else()
-    add_executable(enginesim_smoke tests/smoke.c)
+    add_executable(enginesim_smoke core/test/smoke.c)
     target_link_libraries(enginesim_smoke PRIVATE enginesim)
     enable_testing()
     add_test(NAME smoke COMMAND enginesim_smoke)

@@ -286,6 +286,16 @@ extern "C" void es_sim_set_ignition(es_sim *sim, int enabled) {
     sim->engine.getIgnitionModule()->m_enabled = sim->ignition;
 }
 
+extern "C" void es_sim_set_crank_speed(es_sim *sim, double rpm) {
+    if (sim == nullptr) return;
+    /* Upstream spins the crank negative and reports getRpm() as the absolute
+     * value, so match its sign or the engine runs backwards. */
+    const double radiansPerSecond = -rpm * (2.0 * constants::pi / 60.0);
+    for (int i = 0; i < sim->engine.getCrankshaftCount(); ++i) {
+        sim->engine.getCrankshaft(i)->m_body.v_theta = radiansPerSecond;
+    }
+}
+
 extern "C" void es_sim_set_dyno(es_sim *sim, int enabled, double speed) {
     if (sim == nullptr) return;
     sim->sim.m_dyno.m_enabled = (enabled != 0);

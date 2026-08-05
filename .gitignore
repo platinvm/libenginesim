@@ -1,6 +1,9 @@
 build/
 build-*/
 node_modules
-package-lock.json
 _site/
 *.tgz
+bindings/js/wasm/*
+!bindings/js/wasm/*.d.mts
+bindings/js/src/types.ts
+examples/*/dist/
