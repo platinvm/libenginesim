@@ -207,28 +207,39 @@ never linked.
   engine with its own, and a response's energy and an exhaust's `audio_volume`
   only mean anything together. So upstream's literal mix levels do not transfer:
   the inline-4's are 64× its upstream values, measured against the shipped
-  response. Build an engine with upstream's numbers verbatim and it may come out
-  inaudible or clipped.
+  response. Every new preset's `audio_volume` was re-tuned by ear and by
+  measured RMS against the V8's rather than copied from upstream, and it still
+  shows: the flat-4, inline-5, inline-6 and V6 needed 5–28× multipliers to
+  land in the same loudness range as the rest. Build an engine with upstream's
+  numbers verbatim and it may come out inaudible or clipped.
 - **Rebuilding a running engine restarts it.** `setEngine` hands the replacement
   the speed its predecessor had, but a fresh simulation has no gas charge and
   stalls within half a second, so it is motored for one second the way a starter
   would. You hear that.
-- **`es_engine_def.flywheel_radius` is not read by anything.** Upstream's
-  `Crankshaft::Parameters` has no such field; only `crank_moment_of_inertia`
-  reaches the physics. The field is inert and should come out of the ABI.
 - **The simulation is barely faster than real time, and glitches.** Measured
   in an audio callback with a 128-frame quantum (2.90 ms of budget per block):
   at upstream's own rates the V8 ran at 0.91x real time and the inline-4 at
   0.72x, so the audio thread could not fill every block and the output popped
   continuously. Their simulation frequencies are now 4000 and 6000 Hz rather
-  than upstream's 10000 and 20000, which buys 1.27x and 1.58x. Occasional
-  blocks still overrun, and lowering the rate costs high-frequency detail in
-  the sound. The dashboard now shows audio load and dropouts, so this is
-  visible rather than inferred: measured in Chromium it reads 107% at idle
-  and 83% at wide-open throttle, which is to say still over budget. This
-  wants profiling, not another guess at a number.
-- **Two built-in engines**, the V8 and the inline-4. Anything else you write
-  yourself — which is now the point.
+  than upstream's 10000 and 20000, which buys 1.27x and 1.58x. The dashboard
+  now shows audio load and dropouts, so this is visible rather than inferred,
+  and a physics-rate slider lets you trade detail for headroom live. Dropping
+  it further was checked against the readout rather than assumed to help:
+  a 6.0→3.0 kHz test on the V8 measurably lowered load, so the cost is real,
+  just partial — the rest is audio synthesis, which the rate slider can't
+  touch. `-msimd128` was tried on the wasm build and made no measurable
+  difference in a real-browser A/B, so it was left out rather than kept on
+  faith.
+- **Eight built-in engines**: the V8 and inline-4 from before, plus a
+  single (Honda TRX520), V-twin (Harley Davidson Shovelhead), flat-4 (Subaru
+  EJ25), inline-5 (Audi I5), inline-6 (Toyota 2JZ) and even-fire V6, each
+  transcribed from upstream's own example scripts. The V-twin is an even-fire
+  approximation: the real Shovelhead fires at an uneven 315°/405° split, but
+  cam and spark timing here are always spaced evenly by firing order, so an
+  odd interval isn't expressible without a further ABI addition. It sounds
+  like a V-twin, just not quite that one. Custom engines you build yourself
+  can be saved, reloaded and deleted from the dashboard (stored in
+  `localStorage`), so this is no longer the only way to get more.
 - **The dyno is the only load.** A vehicle and transmission exist inside the
   simulation, but no gear or clutch control is exposed.
 - **Tested on Linux (GCC 15) and Emscripten 6 only.** The `__declspec` export
