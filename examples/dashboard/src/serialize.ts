@@ -36,6 +36,10 @@ const HINTS: Record<string, (v: number) => string> = {
   cam_base_radius: (v) => `${(v / 0.0254).toFixed(3)}"`,
 };
 
+/* Owned by a control rather than the text: it is a performance dial, not a
+ * property of the engine, and it belongs where its cost is visible. */
+const OMITTED = new Set(['simulation_frequency']);
+
 function num(v: number): string {
   if (!Number.isFinite(v)) return '0';
   if (Number.isInteger(v)) return String(v);
@@ -77,7 +81,8 @@ function write(value: unknown, indent: number): string {
     return `[\n${items.join(',\n')}\n${pad}]`;
   }
 
-  const entries = Object.entries(value as Record<string, unknown>).filter(([, v]) => v !== undefined);
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([k, v]) => v !== undefined && !OMITTED.has(k));
   if (entries.length === 0) return '{}';
   const body = entries.map(([k, v]) => {
     const rendered = write(v, indent + 1);

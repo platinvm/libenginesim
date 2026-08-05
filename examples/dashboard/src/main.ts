@@ -24,6 +24,7 @@ const ui = {
   throttle: $('throttle') as HTMLInputElement, throttleOut: $('throttle-out'),
   volume: $('volume') as HTMLInputElement, volumeOut: $('volume-out'),
   dyno: $('dyno') as HTMLInputElement, dynoOut: $('dyno-out'), status: $('status'),
+  simrate: $('simrate') as HTMLInputElement, simrateOut: $('simrate-out'),
   tach: document.querySelector('.tach')!, tachValue: $('tach-value'), tachRedline: $('tach-redline'),
   ticks: $('tach-ticks'), rpmText: $('rpm-text'), limiter: $('limiter'),
   rEngine: $('r-engine'), rDisp: $('r-disp'), rTorque: $('r-torque'),
@@ -40,6 +41,8 @@ let dynoOn = false;
 let activePreset = 0;
 /* Lowest speed seen while running: the engine's own idle, whatever it is. */
 let idleRpm = 700;
+/* Kept out of the editor: a dial for cost, not a property of the engine. */
+let simFrequency = 6000;
 
 /* ---------------------------------------------------------------- editor */
 
@@ -55,7 +58,9 @@ const editor = new EditorView({
 
 let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
 function scheduleRebuild() {
-  if (!engine || !ui.live.checked) return;
+  if (!engine) return;
+  /* The rate dial always applies; only editor text waits for the checkbox. */
+  if (!ui.live.checked && document.activeElement !== ui.simrate) return;
   clearTimeout(rebuildTimer);
   /* Long enough not to rebuild on every keystroke mid-word. */
   rebuildTimer = setTimeout(rebuild, 700);
@@ -72,6 +77,7 @@ async function rebuild() {
   let def: EngineDef;
   try {
     def = fromSource(editor.state.doc.toString(), units);
+    def.simulation_frequency = simFrequency;
   } catch (err) {
     setMessage(err instanceof Error ? err.message : String(err), 'bad');
     return;
@@ -125,7 +131,8 @@ function animate(): void {
 /* -------------------------------------------------------------- controls */
 
 function setEnabled(on: boolean): void {
-  for (const el of [ui.starter, ui.ignition, ui.throttle, ui.volume, ui.dyno, ui.presets]) el.disabled = !on;
+  for (const el of [ui.starter, ui.ignition, ui.throttle, ui.volume, ui.dyno, ui.presets,
+                    ui.simrate]) el.disabled = !on;
 }
 
 function applyThrottle(percent: number): void {
@@ -150,10 +157,18 @@ function showPresets(presets: readonly Preset[]): void {
   ui.presets.onchange = () => loadPreset(presets, Number(ui.presets.value));
 }
 
+function showSimRate(hz: number): void {
+  simFrequency = hz;
+  ui.simrate.value = String(hz);
+  ui.simrateOut.textContent = `${(hz / 1000).toFixed(1)} kHz`;
+}
+
 function loadPreset(presets: readonly Preset[], index: number): void {
   const preset = presets[index];
   if (!preset) return;
   activePreset = index;
+  /* Each engine ships the rate it was tuned at. */
+  showSimRate(preset.def.simulation_frequency ?? simFrequency);
   ui.presets.value = String(index);
   editor.dispatch({
     changes: { from: 0, to: editor.state.doc.length, insert: toSource(preset.def) },
@@ -269,6 +284,7 @@ async function boot() {
     });
 
     setEnabled(true);
+    showSimRate(first.def.simulation_frequency ?? simFrequency);
     engine.setVolume(Number(ui.volume.value) / 100);
     setMessage(`Running ${first.name}.`, 'good');
     await armAudio();
@@ -313,6 +329,12 @@ ui.ignition.addEventListener('click', () => {
 });
 
 ui.throttle.addEventListener('input', () => applyThrottle(Number(ui.throttle.value)));
+
+ui.simrate.addEventListener('input', () => {
+  showSimRate(Number(ui.simrate.value));
+  /* Create-time only, so this rebuilds - which carries the speed across. */
+  scheduleRebuild();
+});
 
 ui.volume.addEventListener('input', () => {
   ui.volumeOut.textContent = `${ui.volume.value}%`;

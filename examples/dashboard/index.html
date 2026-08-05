@@ -83,17 +83,22 @@
           <span class="hint">Hold <kbd>Space</kbd> for wide open</span>
         </label>
         <label class="field">
-          <span class="field-label">Volume <output id="volume-out">70%</output></span>
-          <input id="volume" type="range" min="0" max="100" value="70" disabled>
-          <span class="hint">Engines are loud. Start low.</span>
+          <span class="field-label">Dyno <output id="dyno-out">off</output></span>
+          <input id="dyno" type="range" min="0" max="1000" step="5" value="0" disabled>
+          <span class="hint">Idle to rev limit, log-spaced. Holds the crank so torque can be read.</span>
         </label>
       </div>
 
       <div class="row">
         <label class="field">
-          <span class="field-label">Dyno <output id="dyno-out">off</output></span>
-          <input id="dyno" type="range" min="0" max="1000" step="5" value="0" disabled>
-          <span class="hint">Idle to rev limit, log-spaced. Holds the crank so torque can be read.</span>
+          <span class="field-label">Volume <output id="volume-out">70%</output></span>
+          <input id="volume" type="range" min="0" max="100" value="70" disabled>
+          <span class="hint">Engines are loud. Start low.</span>
+        </label>
+        <label class="field">
+          <span class="field-label">Physics rate <output id="simrate-out">&mdash;</output></span>
+          <input id="simrate" type="range" min="2000" max="20000" step="500" value="6000" disabled>
+          <span class="hint">Detail against CPU. Watch the audio load.</span>
         </label>
       </div>
     </div>
