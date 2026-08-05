@@ -13,21 +13,27 @@
     <h1>libenginesim</h1>
     <p>Edit the engine on the left. It is rebuilt and running before you finish reading this.</p>
   </div>
-  <div class="presets" id="presets" role="group" aria-label="Built-in engines"></div>
+  <div class="topbar-actions">
+    <button id="power" class="btn btn-primary" type="button" hidden>Start audio</button>
+  </div>
 </header>
 
 <main>
   <section class="pane editor-pane" aria-label="Engine definition">
     <div class="pane-head">
       <h2>Engine definition</h2>
-      <label class="live">
-        <input type="checkbox" id="live" checked>
-        Rebuild as I type
+      <label class="picker">
+        <span class="visually-hidden">Engine</span>
+        <select id="presets" aria-label="Built-in engines"></select>
       </label>
     </div>
     <div class="editor" id="editor"></div>
     <div class="editor-foot">
-      <button class="btn" id="apply" type="button">Rebuild engine</button>
+      <button class="btn btn-small" id="apply" type="button">Rebuild</button>
+      <label class="live">
+        <input type="checkbox" id="live" checked>
+        as I type
+      </label>
       <p class="msg" id="msg">&nbsp;</p>
     </div>
   </section>
@@ -66,7 +72,6 @@
 
     <div class="controls">
       <div class="row primary">
-        <button id="power" class="btn btn-primary" type="button" hidden>Start audio</button>
         <button id="starter" class="btn" type="button" disabled>Hold to crank</button>
         <button id="ignition" class="btn" type="button" disabled aria-pressed="true">Ignition on</button>
       </div>

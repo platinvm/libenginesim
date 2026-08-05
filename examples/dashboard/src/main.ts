@@ -17,7 +17,7 @@ import './style.css';
 
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 const ui = {
-  presets: $('presets'), editor: $('editor'), apply: $('apply'), msg: $('msg'),
+  presets: $('presets') as HTMLSelectElement, editor: $('editor'), apply: $('apply'), msg: $('msg'),
   live: $('live') as HTMLInputElement,
   power: $('power') as HTMLButtonElement, starter: $('starter') as HTMLButtonElement,
   ignition: $('ignition') as HTMLButtonElement,
@@ -125,7 +125,7 @@ function animate(): void {
 /* -------------------------------------------------------------- controls */
 
 function setEnabled(on: boolean): void {
-  for (const el of [ui.starter, ui.ignition, ui.throttle, ui.volume, ui.dyno]) el.disabled = !on;
+  for (const el of [ui.starter, ui.ignition, ui.throttle, ui.volume, ui.dyno, ui.presets]) el.disabled = !on;
 }
 
 function applyThrottle(percent: number): void {
@@ -141,20 +141,20 @@ function crank(on: boolean): void {
 
 function showPresets(presets: readonly Preset[]): void {
   ui.presets.replaceChildren(...presets.map((p) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = `seg${p.index === activePreset ? ' active' : ''}`;
-    b.textContent = p.name;
-    b.addEventListener('click', () => loadPreset(presets, p.index));
-    return b;
+    const option = document.createElement('option');
+    option.value = String(p.index);
+    option.textContent = p.name;
+    option.selected = p.index === activePreset;
+    return option;
   }));
+  ui.presets.onchange = () => loadPreset(presets, Number(ui.presets.value));
 }
 
 function loadPreset(presets: readonly Preset[], index: number): void {
   const preset = presets[index];
   if (!preset) return;
   activePreset = index;
-  for (const [i, b] of [...ui.presets.children].entries()) b.classList.toggle('active', i === index);
+  ui.presets.value = String(index);
   editor.dispatch({
     changes: { from: 0, to: editor.state.doc.length, insert: toSource(preset.def) },
   });

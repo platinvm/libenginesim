@@ -406,3 +406,32 @@ footer a { color: var(--muted); }
 /* Performance readout: green until it is not. */
 .readout dd.warn { color: var(--accent-2); }
 .readout dd.bad  { color: var(--danger); }
+
+/* ------------------------------------------------- topbar and the picker */
+
+.topbar-actions { display: flex; gap: .5rem; align-items: center; min-height: 2.4rem; }
+
+.picker select {
+  appearance: none;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-weight: 550;
+  font-size: .82rem;
+  padding: .3rem 1.8rem .3rem .6rem;
+  cursor: pointer;
+  /* Chevron, so the control does not read as a plain text field. */
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 52%, calc(100% - 9px) 52%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.picker select:hover:not(:disabled) { border-color: #39404d; }
+.picker select:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn-small { padding: .38rem .7rem; font-size: .82rem; border-radius: 8px; }
+.editor-foot .live { white-space: nowrap; }
