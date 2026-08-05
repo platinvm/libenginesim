@@ -253,7 +253,13 @@ typedef struct es_engine_def {
 
 typedef enum es_preset {
     ES_PRESET_INLINE_4 = 0,
-    ES_PRESET_V8 = 1
+    ES_PRESET_V8 = 1,
+    ES_PRESET_SINGLE = 2,
+    ES_PRESET_V_TWIN = 3,
+    ES_PRESET_FLAT_4 = 4,
+    ES_PRESET_INLINE_5 = 5,
+    ES_PRESET_INLINE_6 = 6,
+    ES_PRESET_V6 = 7
 } es_preset;
 
 /*
