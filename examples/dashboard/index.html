@@ -22,10 +22,14 @@
   <section class="pane editor-pane" aria-label="Engine definition">
     <div class="pane-head">
       <h2>Engine definition</h2>
-      <label class="picker">
-        <span class="visually-hidden">Engine</span>
-        <select id="presets" aria-label="Built-in engines"></select>
-      </label>
+      <div class="picker-group">
+        <label class="picker">
+          <span class="visually-hidden">Engine</span>
+          <select id="presets" aria-label="Built-in and saved engines"></select>
+        </label>
+        <button class="btn btn-small" id="save-custom" type="button" title="Save the current code as a custom engine">Save as…</button>
+        <button class="btn btn-small" id="delete-custom" type="button" title="Delete this saved engine" hidden>Delete</button>
+      </div>
     </div>
     <div class="editor" id="editor"></div>
     <div class="editor-foot">

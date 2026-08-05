@@ -94,6 +94,7 @@ main {
   color: var(--muted);
   font-weight: 600;
 }
+.picker-group { display: flex; align-items: center; gap: .4rem; }
 .live { color: var(--muted); font-size: .78rem; display: flex; align-items: center; gap: .4rem; cursor: pointer; }
 .live input { accent-color: var(--accent); }
 

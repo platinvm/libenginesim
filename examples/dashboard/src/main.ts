@@ -18,6 +18,7 @@ import './style.css';
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 const ui = {
   presets: $('presets') as HTMLSelectElement, editor: $('editor'), apply: $('apply'), msg: $('msg'),
+  saveCustom: $('save-custom') as HTMLButtonElement, deleteCustom: $('delete-custom') as HTMLButtonElement,
   live: $('live') as HTMLInputElement,
   power: $('power') as HTMLButtonElement, starter: $('starter') as HTMLButtonElement,
   ignition: $('ignition') as HTMLButtonElement,
@@ -39,8 +40,36 @@ let redline = 6500;
 let displayedRpm = 0;
 let dynoOn = false;
 let activePreset = 0;
+let activeCustomId: string | null = null;
+let builtinPresets: readonly Preset[] = [];
 /* Kept out of the editor: a dial for cost, not a property of the engine. */
 let simFrequency = 6000;
+
+/* ---------------------------------------------------------- custom engines */
+
+interface CustomEngine { id: string; name: string; source: string }
+const CUSTOM_ENGINES_KEY = 'libenginesim.customEngines';
+
+/* localStorage can throw (private browsing, quota, disabled storage). A
+ * custom engine failing to save is a message, not a crash. */
+function loadCustomEngines(): CustomEngine[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_ENGINES_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as CustomEngine[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomEngines(list: CustomEngine[]): boolean {
+  try {
+    localStorage.setItem(CUSTOM_ENGINES_KEY, JSON.stringify(list));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /* ---------------------------------------------------------------- editor */
 
@@ -130,7 +159,7 @@ function animate(): void {
 
 function setEnabled(on: boolean): void {
   for (const el of [ui.starter, ui.ignition, ui.throttle, ui.volume, ui.dyno, ui.presets,
-                    ui.simrate]) el.disabled = !on;
+                    ui.simrate, ui.saveCustom]) el.disabled = !on;
 }
 
 function applyThrottle(percent: number): void {
@@ -144,15 +173,98 @@ function crank(on: boolean): void {
   ui.starter.classList.toggle('cranking', on);
 }
 
-function showPresets(presets: readonly Preset[]): void {
-  ui.presets.replaceChildren(...presets.map((p) => {
+/* Custom entries share the one <select> with the built-ins, told apart by a
+ * "custom:" prefix on the option value so onchange can route to either. */
+function refreshEngineList(): void {
+  const builtinGroup = document.createElement('optgroup');
+  builtinGroup.label = 'Built-in';
+  for (const p of builtinPresets) {
     const option = document.createElement('option');
     option.value = String(p.index);
     option.textContent = p.name;
-    option.selected = p.index === activePreset;
-    return option;
-  }));
-  ui.presets.onchange = () => loadPreset(presets, Number(ui.presets.value));
+    option.selected = activeCustomId === null && p.index === activePreset;
+    builtinGroup.appendChild(option);
+  }
+
+  const groups = [builtinGroup];
+  const customEngines = loadCustomEngines();
+  if (customEngines.length > 0) {
+    const customGroup = document.createElement('optgroup');
+    customGroup.label = 'Custom';
+    for (const c of customEngines) {
+      const option = document.createElement('option');
+      option.value = `custom:${c.id}`;
+      option.textContent = c.name;
+      option.selected = c.id === activeCustomId;
+      customGroup.appendChild(option);
+    }
+    groups.push(customGroup);
+  }
+
+  ui.presets.replaceChildren(...groups);
+  ui.presets.onchange = () => {
+    const value = ui.presets.value;
+    if (value.startsWith('custom:')) loadCustomEngine(value.slice('custom:'.length));
+    else loadPreset(builtinPresets, Number(value));
+  };
+  ui.deleteCustom.hidden = activeCustomId === null;
+}
+
+function loadCustomEngine(id: string): void {
+  const found = loadCustomEngines().find((c) => c.id === id);
+  if (!found) return;
+  activeCustomId = id;
+  try {
+    const def = fromSource(found.source, units);
+    showSimRate(def.simulation_frequency ?? simFrequency);
+  } catch {
+    /* Falls back to whatever rate is already showing; rebuild() below is
+     * what actually reports the parse error to the user. */
+  }
+  ui.presets.value = `custom:${id}`;
+  ui.deleteCustom.hidden = false;
+  editor.dispatch({
+    changes: { from: 0, to: editor.state.doc.length, insert: found.source },
+  });
+  ui.dyno.value = '0';
+  dynoOn = false;
+  ui.dynoOut.textContent = 'off';
+  applyThrottle(0);
+  rebuild();
+}
+
+function saveCurrentAsCustom(): void {
+  let def: EngineDef;
+  try {
+    def = fromSource(editor.state.doc.toString(), units);
+  } catch (err) {
+    setMessage(err instanceof Error ? err.message : String(err), 'bad');
+    return;
+  }
+  const name = window.prompt('Name this engine:', def.name ?? 'My engine');
+  if (!name) return;
+
+  const list = loadCustomEngines();
+  const id = crypto.randomUUID();
+  list.push({ id, name, source: editor.state.doc.toString() });
+  if (!saveCustomEngines(list)) {
+    setMessage('Could not save: local storage is unavailable.', 'bad');
+    return;
+  }
+  activeCustomId = id;
+  refreshEngineList();
+  setMessage(`Saved "${name}".`, 'good');
+}
+
+function deleteActiveCustomEngine(): void {
+  if (activeCustomId === null) return;
+  const list = loadCustomEngines();
+  const found = list.find((c) => c.id === activeCustomId);
+  if (!found || !window.confirm(`Delete "${found.name}"?`)) return;
+  saveCustomEngines(list.filter((c) => c.id !== activeCustomId));
+  activeCustomId = null;
+  refreshEngineList();
+  loadPreset(builtinPresets, 0);
 }
 
 function showSimRate(hz: number): void {
@@ -165,6 +277,8 @@ function loadPreset(presets: readonly Preset[], index: number): void {
   const preset = presets[index];
   if (!preset) return;
   activePreset = index;
+  activeCustomId = null;
+  ui.deleteCustom.hidden = true;
   /* Each engine ships the rate it was tuned at. */
   showSimRate(preset.def.simulation_frequency ?? simFrequency);
   ui.presets.value = String(index);
@@ -270,7 +384,8 @@ async function boot() {
 
     /* Handy from the browser console, and what the browser test drives. */
     Object.assign(globalThis as Record<string, unknown>, { engineSim: engine, editor });   // handy from the console
-    showPresets(engine.presets);
+    builtinPresets = engine.presets;
+    refreshEngineList();
     const first = engine.presets[activePreset];
     if (!first) throw new Error('the library reported no built-in engines');
     editor.dispatch({
@@ -299,6 +414,8 @@ function setStatus(html: string, isError = false): void {
 
 ui.power.addEventListener('click', () => void armAudio());
 ui.apply.addEventListener('click', rebuild);
+ui.saveCustom.addEventListener('click', saveCurrentAsCustom);
+ui.deleteCustom.addEventListener('click', deleteActiveCustomEngine);
 
 ui.starter.addEventListener('pointerdown', (e) => {
   if (ui.starter.disabled) return;
