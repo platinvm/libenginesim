@@ -402,3 +402,7 @@ footer a { color: var(--muted); }
   .editor { min-height: 0; }
   .editor .cm-scroller { overflow: auto; }
 }
+
+/* Performance readout: green until it is not. */
+.readout dd.warn { color: var(--accent-2); }
+.readout dd.bad  { color: var(--danger); }

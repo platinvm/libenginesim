@@ -16,6 +16,14 @@ import wasmUrl from '../wasm/enginesim.wasm?url';
 import type { EngineDef, Preset, Telemetry } from './types.ts';
 
 export type { EngineDef, Preset, Telemetry } from './types.ts';
+
+/** Telemetry plus how hard the audio thread is working to produce it. */
+export interface RunningTelemetry extends Telemetry {
+  /** Fraction of the audio deadline spent simulating. Over 1 will glitch. */
+  load: number;
+  /** Blocks the browser failed to deliver on time since the engine started. */
+  dropouts: number;
+}
 export type {
   BankDef, CamLobe, Curve, CylinderDef, ExhaustDef, SimConfig,
 } from './types.ts';
@@ -31,7 +39,7 @@ export interface EngineSimOptions {
 }
 
 interface ReadyMessage { type: 'ready'; presets: Preset[]; sampleRate: number }
-interface TelemetryMessage extends Telemetry { type: 'telemetry' }
+interface TelemetryMessage extends Telemetry { type: 'telemetry'; load: number; dropouts: number }
 interface LoadedMessage { type: 'loaded'; id: number; name: string | null }
 interface InvalidMessage { type: 'invalid'; id: number; message: string }
 interface ErrorMessage { type: 'error'; message: string }
@@ -45,9 +53,9 @@ export class EngineSim {
   readonly #context: AudioContext;
   readonly #ownsContext: boolean;
   readonly #presets: readonly Preset[];
-  readonly #listeners = new Set<(t: Telemetry) => void>();
+  readonly #listeners = new Set<(t: RunningTelemetry) => void>();
   readonly #waiters = new Map<number, { resolve: () => void; reject: (e: Error) => void }>();
-  #telemetry: Telemetry | null = null;
+  #telemetry: RunningTelemetry | null = null;
   #destroyed = false;
 
   private constructor(
@@ -106,7 +114,10 @@ export class EngineSim {
     node.connect(context.destination);
 
     const ready = await new Promise<ReadyMessage>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('worklet did not start')), 20000);
+      /* Generous, because a suspended context does not instantiate the
+       * processor at all: if the caller supplied a context that is waiting on
+       * the autoplay policy, "ready" cannot arrive until it resumes. */
+      const timer = setTimeout(() => reject(new Error('worklet did not start')), 120000);
       node.port.onmessage = ({ data }: MessageEvent<FromWorklet>) => {
         if (data.type === 'ready') { clearTimeout(timer); resolve(data); }
         else if (data.type === 'error') { clearTimeout(timer); reject(new Error(data.message)); }
@@ -126,7 +137,7 @@ export class EngineSim {
   get output(): AudioWorkletNode { return this.#node; }
 
   /** Most recent telemetry, or null before the first frame. */
-  get telemetry(): Telemetry | null { return this.#telemetry; }
+  get telemetry(): RunningTelemetry | null { return this.#telemetry; }
 
   /**
    * The built-in engines, as plain objects you can edit and pass back to
@@ -145,7 +156,7 @@ export class EngineSim {
    * Subscribes to telemetry, delivered about 20 times a second.
    * @returns Call to unsubscribe.
    */
-  onTelemetry(fn: (t: Telemetry) => void): () => void {
+  onTelemetry(fn: (t: RunningTelemetry) => void): () => void {
     this.#listeners.add(fn);
     return () => this.#listeners.delete(fn);
   }

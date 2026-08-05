@@ -10,7 +10,8 @@ import { EditorView, basicSetup } from 'codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { EngineSim, units } from 'libenginesim';
-import type { EngineDef, Preset, Telemetry } from 'libenginesim/types';
+import type { EngineDef, Preset } from 'libenginesim/types';
+import type { RunningTelemetry } from 'libenginesim';
 import { toSource, fromSource } from './serialize.ts';
 import './style.css';
 
@@ -27,6 +28,7 @@ const ui = {
   ticks: $('tach-ticks'), rpmText: $('rpm-text'), limiter: $('limiter'),
   rEngine: $('r-engine'), rDisp: $('r-disp'), rTorque: $('r-torque'),
   rPower: $('r-power'), rMap: $('r-map'), rThrottle: $('r-throttle'),
+  rLoad: $('r-load'), rDrops: $('r-drops'),
 };
 
 const ARC = 2 * Math.PI * 82 * 0.75;   // 75% of a circle of radius 82
@@ -167,10 +169,16 @@ function loadPreset(presets: readonly Preset[], index: number): void {
 function autoCrank(): void {
   if (!engine) return;
   crank(true);
-  const started = performance.now();
+  /* Measured against the audio clock, not the wall: when the context has just
+   * resumed the audio thread may not have rendered anything yet, and a
+   * wall-clock deadline expires before the engine has turned at all. */
+  const startedAt = engine.context.currentTime;
   const poll = setInterval(() => {
-    const caught = (engine?.telemetry?.rpm ?? 0) > 500;
-    if (caught || performance.now() - started > 4000) {
+    /* Well clear of the starter's own speed: releasing the moment it first
+     * fires catches it mid-cough and it stalls straight back out. */
+    const caught = (engine?.telemetry?.rpm ?? 0) > 900;
+    const elapsed = (engine?.context.currentTime ?? 0) - startedAt;
+    if (caught || elapsed > 6) {
       clearInterval(poll);
       crank(false);
       setStatus(caught
@@ -181,40 +189,54 @@ function autoCrank(): void {
 }
 
 /*
- * Browsers refuse to start audio until the page has been interacted with. Try
- * anyway - a context is often allowed to start if the visitor has been here
- * before - and fall back to starting on the first gesture, whatever it is,
- * rather than making a button click the price of admission.
+ * Browsers hold audio until the page has been interacted with. Rather than
+ * making a button click the price of admission, the first gesture anywhere
+ * does it - the button is only there so the requirement is visible.
  */
+function armGesture(context: AudioContext): void {
+  ui.power.hidden = false;
+  ui.power.disabled = false;
+  setStatus('Your browser is holding the sound. Click anywhere to start it.');
+  const onGesture = (): void => {
+    window.removeEventListener('pointerdown', onGesture);
+    window.removeEventListener('keydown', onGesture);
+    void context.resume();
+  };
+  window.addEventListener('pointerdown', onGesture);
+  window.addEventListener('keydown', onGesture);
+}
+
+/** Resumes if allowed, and cranks once the sound is actually flowing. */
 async function armAudio(): Promise<void> {
   if (!engine) return;
   await engine.resume().catch(() => {});
-  if (engine.context.state === 'running') {
-    ui.power.hidden = true;
-    autoCrank();
-    return;
+  if (engine.context.state !== 'running') {
+    armGesture(engine.context);
+    await new Promise<void>((resolve) => {
+      const check = setInterval(() => {
+        if (engine?.context.state === 'running') { clearInterval(check); resolve(); }
+      }, 200);
+    });
   }
-  ui.power.hidden = false;
-  ui.power.disabled = false;
-  ui.power.textContent = 'Start audio';
-  setStatus('Your browser is holding the sound until you interact. Click anywhere.');
-  const onGesture = async (): Promise<void> => {
-    window.removeEventListener('pointerdown', onGesture);
-    window.removeEventListener('keydown', onGesture);
-    await engine?.resume().catch(() => {});
-    ui.power.hidden = true;
-    autoCrank();
-  };
-  window.addEventListener('pointerdown', onGesture, { once: true });
-  window.addEventListener('keydown', onGesture, { once: true });
+  ui.power.hidden = true;
+  autoCrank();
 }
 
 async function boot() {
   setStatus('Loading engine…');
   try {
-    engine = await EngineSim.create({ preset: activePreset });
+    /*
+     * The context is ours, not EngineSim's, because a suspended one never
+     * instantiates the worklet: waiting for the engine to report itself ready
+     * would hang until the visitor interacts. Owning it here means the gesture
+     * listener can be armed while that wait is still in flight.
+     */
+    const context = new AudioContext();
+    if (context.state === 'suspended') void armGesture(context);
 
-    engine.onTelemetry((t: Telemetry) => {
+    engine = await EngineSim.create({ preset: activePreset, context });
+
+    engine.onTelemetry((t: RunningTelemetry) => {
       if (t.redline && Math.abs(t.redline - redline) > 1) { redline = t.redline; layoutDial(); }
       /* The engine's own idle, learned rather than assumed. */
       if (!dynoOn && t.throttle_plate_position < 0.2 && t.rpm > 200) {
@@ -229,6 +251,12 @@ async function boot() {
       ui.rMap.textContent = `${Math.round(t.manifold_pressure / 1000)} kPa`;
       ui.rThrottle.textContent = `${Math.round(t.throttle_plate_position * 100)}%`;
       ui.limiter.hidden = !t.rev_limiter_active;
+      /* Over 100% means the simulation cannot keep up and the sound breaks. */
+      ui.rLoad.textContent = `${Math.round(t.load * 100)}%`;
+      ui.rLoad.classList.toggle('warn', t.load > 0.8);
+      ui.rLoad.classList.toggle('bad', t.load > 1);
+      ui.rDrops.textContent = String(t.dropouts);
+      ui.rDrops.classList.toggle('bad', t.dropouts > 0);
     });
 
     /* Handy from the browser console, and what the browser test drives. */

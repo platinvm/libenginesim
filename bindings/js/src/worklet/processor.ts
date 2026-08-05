@@ -49,6 +49,15 @@ class EngineProcessor extends AudioWorkletProcessor {
   #starter = false;
   #telemetryCountdown = 0;
   #restartFrames = 0;
+  /* Performance metering. There is no high-resolution clock in a worklet -
+   * performance.now() is shimmed onto currentTime, which only moves once per
+   * block - so busy time is accumulated with Date.now() over many blocks,
+   * where millisecond resolution averages out. */
+  #busyMs = 0;
+  #meteredFrames = 0;
+  #dropouts = 0;
+  #lastCurrentTime = 0;
+  #loadFactor = 0;
 
   constructor(options?: AudioWorkletNodeOptions) {
     super();
@@ -194,9 +203,28 @@ class EngineProcessor extends AudioWorkletProcessor {
       if (this.#restartFrames <= 0) M._es_sim_set_starter(this.#sim, this.#starter ? 1 : 0);
     }
 
+    /* A block the browser could not deliver on time shows up as currentTime
+     * jumping by more than the quantum it should have advanced. */
+    const quantum = frames / sampleRate;
+    if (this.#lastCurrentTime !== 0 && currentTime - this.#lastCurrentTime > quantum * 1.5) {
+      this.#dropouts++;
+    }
+    this.#lastCurrentTime = currentTime;
+
+    const began = Date.now();
     M._es_sim_step(this.#sim, this.#audioPtr, frames);
     const mono = M.HEAPF32.subarray(this.#audioPtr >> 2, (this.#audioPtr >> 2) + frames);
     for (const channel of out) channel.set(mono);
+    this.#busyMs += Date.now() - began;
+    this.#meteredFrames += frames;
+
+    /* Fraction of the audio deadline actually spent working. Over 1 means the
+     * engine cannot keep up and the output will glitch. */
+    if (this.#meteredFrames >= sampleRate / 4) {
+      this.#loadFactor = this.#busyMs / ((this.#meteredFrames / sampleRate) * 1000);
+      this.#busyMs = 0;
+      this.#meteredFrames = 0;
+    }
 
     /* ~20 Hz is plenty for a gauge and keeps the message queue quiet. */
     this.#telemetryCountdown -= frames;
@@ -204,7 +232,9 @@ class EngineProcessor extends AudioWorkletProcessor {
       this.#telemetryCountdown = sampleRate / 20;
       M._es_sim_telemetry(this.#sim, this.#telemetryPtr);
       const t = readStruct(M, this.#schema, 'telemetry', this.#telemetryPtr) as unknown as Telemetry;
-      this.port.postMessage({ type: 'telemetry', ...t });
+      this.port.postMessage({
+        type: 'telemetry', ...t, load: this.#loadFactor, dropouts: this.#dropouts,
+      });
     }
     return true;
   }

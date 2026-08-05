@@ -223,7 +223,10 @@ never linked.
   continuously. Their simulation frequencies are now 4000 and 6000 Hz rather
   than upstream's 10000 and 20000, which buys 1.27x and 1.58x. Occasional
   blocks still overrun, and lowering the rate costs high-frequency detail in
-  the sound. This wants profiling, not another guess at a number.
+  the sound. The dashboard now shows audio load and dropouts, so this is
+  visible rather than inferred: measured in Chromium it reads 107% at idle
+  and 83% at wide-open throttle, which is to say still over budget. This
+  wants profiling, not another guess at a number.
 - **Two built-in engines**, the V8 and the inline-4. Anything else you write
   yourself — which is now the point.
 - **The dyno is the only load.** A vehicle and transmission exist inside the
