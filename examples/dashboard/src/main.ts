@@ -252,9 +252,19 @@ ui.dyno.addEventListener('input', () => {
 /* Space is wide-open throttle, unless you are typing in the editor. */
 let heldThrottle: number | null = null;
 window.addEventListener('keydown', (e) => {
-  if (e.code !== 'Space' || e.repeat || !engine) return;
-  if ((e.target as HTMLElement | null)?.closest('.editor, input, button')) return;
+  if (e.code !== 'Space') return;
+  const target = e.target as HTMLElement | null;
+  /* Typing wins, and the crank button handles Space itself. */
+  if (target?.closest('.editor, #starter') || target?.matches('input[type="text"], textarea')) {
+    return;
+  }
+
+  /* Before the repeat guard, and on every repeat. Holding a key fires keydown
+   * over and over, and an unprevented Space scrolls the page each time, which
+   * is what made it creep downwards while revving. */
   e.preventDefault();
+  if (e.repeat || !engine) return;
+
   heldThrottle = Number(ui.throttle.value);
   applyThrottle(100);
 });

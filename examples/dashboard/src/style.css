@@ -101,7 +101,7 @@ main {
 
 .editor {
   flex: 1;
-  min-height: 22rem;
+  min-height: 18rem;
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
@@ -385,4 +385,20 @@ footer a { color: var(--muted); }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+}
+
+/* ------------------------------------------------------- desktop framing */
+
+/*
+ * On a wide screen the whole app fits the viewport and each pane scrolls
+ * inside itself. Without this the editor grows to whatever the definition
+ * happens to be - a hundred-odd lines - and the page becomes several
+ * thousand pixels tall, so the gauges scroll out of sight while you type.
+ */
+@media (min-width: 62rem) {
+  body { height: 100dvh; overflow: hidden; }
+  main { min-height: 0; overflow: hidden; }
+  .pane { min-height: 0; }
+  .editor { min-height: 0; }
+  .editor .cm-scroller { overflow: auto; }
 }
