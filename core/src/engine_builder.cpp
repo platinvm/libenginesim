@@ -236,7 +236,7 @@ es_result build_engine(const es_engine_def *def, Engine *engine, EngineParts *pa
     cp.crankThrow = def->stroke / 2;
     cp.pos_x = 0.0;
     cp.pos_y = 0.0;
-    cp.tdc = constants::pi / 2 - maxBankAngle;
+    cp.tdc = (def->crank_tdc != 0.0) ? def->crank_tdc : constants::pi / 2 - maxBankAngle;
     cp.frictionTorque = def->crank_friction_torque;
     cp.rodJournals = static_cast<int>(def->rod_journal_count);
     Crankshaft *crank = engine->getCrankshaft(0);

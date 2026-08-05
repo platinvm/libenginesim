@@ -38,7 +38,7 @@ extern "C" {
 
 /* ------------------------------------------------------------------ ABI -- */
 
-#define ES_ABI_VERSION 1
+#define ES_ABI_VERSION 2
 
 /* Returns ES_ABI_VERSION as compiled into the library. A binding should
  * refuse to run against a library whose value differs from its own. */
@@ -185,7 +185,15 @@ typedef struct es_engine_def {
     double crank_moment_of_inertia;
     double crank_friction_torque;
     double flywheel_mass;
-    double flywheel_radius;
+
+    /* Crank angle (rad) at which the first cylinder in firing_order sparks;
+     * every other cylinder's spark and cam timing is offset from it evenly.
+     * 0 selects pi/2 - max(|bank angle|), which matches upstream for every
+     * bank layout except a true opposed (boxer) engine - upstream sets that
+     * to pi outright, which the automatic formula cannot reach (bank angle
+     * magnitude tops out at pi/2, landing on 0 instead). Set explicitly for
+     * bank angles the automatic formula doesn't cover. */
+    double crank_tdc;
 
     double rod_mass;
     double rod_length;

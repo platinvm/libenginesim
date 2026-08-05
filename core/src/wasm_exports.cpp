@@ -118,7 +118,7 @@ std::string &schema() {
     FIELD(engine_def, crank_moment_of_inertia, "f64");
     FIELD(engine_def, crank_friction_torque, "f64");
     FIELD(engine_def, flywheel_mass, "f64");
-    FIELD(engine_def, flywheel_radius, "f64");
+    FIELD(engine_def, crank_tdc, "f64");
     FIELD(engine_def, rod_mass, "f64");
     FIELD(engine_def, rod_length, "f64");
     FIELD(engine_def, rod_moment_of_inertia, "f64");

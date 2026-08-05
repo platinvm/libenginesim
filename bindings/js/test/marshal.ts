@@ -133,7 +133,7 @@ console.log('\n--- hand-written single cylinder ---');
     bore: u.inch(3.5), stroke: u.inch(3.5),
     crank_mass: u.lb(22), crank_moment_of_inertia: 0.05,
     crank_friction_torque: u.lb_ft(1.5),
-    flywheel_mass: u.lb(22), flywheel_radius: u.inch(6),
+    flywheel_mass: u.lb(22),
     rod_mass: u.g(300), rod_length: u.inch(6), rod_moment_of_inertia: 0.0015,
     piston_mass: u.g(300), piston_compression_height: u.inch(1),
     rod_journal_angles: [0],
