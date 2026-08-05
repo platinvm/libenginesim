@@ -39,8 +39,6 @@ let redline = 6500;
 let displayedRpm = 0;
 let dynoOn = false;
 let activePreset = 0;
-/* Lowest speed seen while running: the engine's own idle, whatever it is. */
-let idleRpm = 700;
 /* Kept out of the editor: a dial for cost, not a property of the engine. */
 let simFrequency = 6000;
 
@@ -253,10 +251,6 @@ async function boot() {
 
     engine.onTelemetry((t: RunningTelemetry) => {
       if (t.redline && Math.abs(t.redline - redline) > 1) { redline = t.redline; layoutDial(); }
-      /* The engine's own idle, learned rather than assumed. */
-      if (!dynoOn && t.throttle_plate_position < 0.2 && t.rpm > 200) {
-        idleRpm = idleRpm === 0 ? t.rpm : Math.min(idleRpm, t.rpm) * 0.999 + t.rpm * 0.001;
-      }
       ui.rEngine.textContent = `${t.cylinder_count} cyl`;
       ui.rDisp.textContent = `${(t.displacement * 1000).toFixed(2)} L`;
       /* Torque and power are dyno measurements; they mean nothing with the
@@ -342,14 +336,17 @@ ui.volume.addEventListener('input', () => {
 });
 
 /*
- * The slider runs from this engine's idle to its rev limit, spaced
+ * The slider runs from a flat 1500 rpm - below which the dyno is holding an
+ * engine slower than it would ever idle on its own - to the rev limit, spaced
  * logarithmically. Even steps in rpm put almost the whole travel up at the top
  * where nothing interesting happens; even steps in ratio give the same
  * proportional change everywhere, so the bottom of the range is usable.
  */
+const DYNO_FLOOR_RPM = 1500;
+
 function dynoRpm(position: number): number {
-  const top = Math.max(idleRpm * 1.2, redline);
-  return idleRpm * (top / idleRpm) ** position;
+  const top = Math.max(DYNO_FLOOR_RPM * 1.2, redline);
+  return DYNO_FLOOR_RPM * (top / DYNO_FLOOR_RPM) ** position;
 }
 
 ui.dyno.addEventListener('input', () => {
