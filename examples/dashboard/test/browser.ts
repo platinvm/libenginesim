@@ -100,10 +100,10 @@ console.log(`       preset 0: ${first.rpm.toFixed(0)} rpm  ${first.cylinders}  `
 check(first.rpm > 300, `first preset idles (${first.rpm.toFixed(0)} rpm)`);
 check(first.peak > 0.01, `first preset makes sound (peak ${first.peak.toFixed(3)})`);
 
-/* Switch engines from the buttons at the top. */
-const buttons = await page.$$('#presets .seg');
-check(buttons.length >= 2, `${buttons.length} presets offered`);
-await buttons[1]!.click();
+/* Switch engines from the preset dropdown at the top. */
+const options = await page.$$('#presets option');
+check(options.length >= 2, `${options.length} presets offered`);
+await page.selectOption('#presets', { index: 1 });
 await page.waitForTimeout(1000);
 await page.evaluate(() => { (window as any).__peak = 0; });
 await crank();
